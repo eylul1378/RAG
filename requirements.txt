@@ -1,0 +1,12 @@
+# Not: foundry-local-sdk 1.x sürümünde SDK'nın API'si kökten değişti
+# (düşük seviyeli bir "control-plane" API'sine geçti). Bu projedeki
+# basit .endpoint / .api_key / .get_model_info() kullanımı 0.5.x
+# sürümüyle uyumlu, bu yüzden sürüm sabitlendi.
+foundry-local-sdk==0.5.1
+openai
+streamlit
+numpy
+PyPDF2
+
+# Not: sqlite3, Python'un standart kütüphanesinin bir parçasıdır,
+# pip ile ayrıca kurulmasına gerek yoktur (bu yüzden burada listelenmedi).
