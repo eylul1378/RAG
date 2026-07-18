@@ -1,9 +1,10 @@
-# Not: foundry-local-sdk 1.x sürümünde SDK'nın API'si kökten değişti
-# (düşük seviyeli bir "control-plane" API'sine geçti). Bu projedeki
-# basit .endpoint / .api_key / .get_model_info() kullanımı 0.5.x
-# sürümüyle uyumlu, bu yüzden sürüm sabitlendi.
-foundry-local-sdk==0.5.1
-openai
+# Not: foundry-local-sdk 1.x sürümü, kendi native çalışma zamanını
+# (Foundry Local Core DLL) doğrudan pip paketiyle birlikte getirir ve
+# sistemde kurulu "foundry" CLI'nin komut satırı yüzeyine bağımlı
+# değildir. Bu yüzden CLI sürümü değişse bile (bkz. Microsoft.FoundryLocal
+# winget paketi) uyumluluk bozulmaz. Sürüm, üretilen kodun API'sinde
+# beklenmedik kırılmalar olmaması için sabitlendi.
+foundry-local-sdk==1.2.3
 streamlit
 numpy
 PyPDF2
