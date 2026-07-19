@@ -15,8 +15,40 @@ CHUNK_OVERLAP_CHARS = 100
 
 TOP_K = 3
 
-SYSTEM_PROMPT = (
-    "Aşağıdaki belgelerden alınan bağlamı kullanarak kullanıcının sorusunu yanıtla. "
-    "Eğer bilgi verilen bağlamda yoksa kesinlikle uydurma ve sadece "
-    '"Bu bilgiyi belgelerde bulamadım" de.'
+# --- Uzman Java Eğitmeni kimliği ---
+# Bilgi tabanı "Think Java" kitabı ve "Algoritma ve Programlama" ders
+# slaytlarından oluşur; eğitmen özellikle OOP, kalıtım, kurucu metodlar,
+# yığın/öbek (stack/heap) bellek yönetimi ve ArrayList/HashMap gibi
+# koleksiyon yapıları konusunda uzmanlaşmıştır.
+BASE_SYSTEM_PROMPT = (
+    "Sen uzman bir Java eğitmenisin. Özellikle nesne yönelimli programlama (OOP), "
+    "kalıtım (inheritance), kurucu metodlar (constructors), yığın (stack) ve öbek "
+    "(heap) bellek yönetimi ile ArrayList/HashMap gibi koleksiyon yapıları konusunda "
+    "derin uzmanlığın var. Öğrencilere sabırlı ve teşvik edici bir üslupla yardımcı ol.\n\n"
+    "SADECE sana verilen bağlam metinlerini kullanarak yanıtla. Bilgi bağlamda yoksa "
+    "kesinlikle uydurma; sadece bu bilgiyi kaynaklarda bulamadığını belirt. "
+    "Yanıtının en sonuna mutlaka bilgiyi aldığın kaynağı ekle "
+    "(Örn: Kaynak: Think_Java.pdf veya Algoritma_Slayt_Hafta3.pdf)."
 )
+
+# Kullanıcının kenar çubuğundan seçebileceği anlatım seviyeleri ve bunların
+# sistem promptuna eklenecek karşılık gelen yönergeleri.
+EXPLANATION_LEVELS = {
+    "Basit ve Anlaşılır": (
+        "Anlatım seviyesi: Basit ve Anlaşılır. Günlük dille, az teknik terimle, "
+        "somut örnekler ve benzetmeler kullanarak, yeni başlayan birine anlatır gibi açıkla."
+    ),
+    "Akademik ve Detaylı": (
+        "Anlatım seviyesi: Akademik ve Detaylı. Doğru teknik terminoloji, formal "
+        "tanımlar ve teknik derinlik kullanarak kapsamlı bir şekilde açıkla."
+    ),
+}
+
+DEFAULT_EXPLANATION_LEVEL = "Basit ve Anlaşılır"
+
+
+def build_system_prompt(explanation_level: str) -> str:
+    """Temel eğitmen kimliğini, kullanıcının seçtiği anlatım seviyesi
+    yönergesiyle birleştirerek nihai sistem promptunu oluşturur."""
+    level_instruction = EXPLANATION_LEVELS.get(explanation_level, EXPLANATION_LEVELS[DEFAULT_EXPLANATION_LEVEL])
+    return f"{BASE_SYSTEM_PROMPT}\n\n{level_instruction}"
