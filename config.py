@@ -15,6 +15,12 @@ CHUNK_OVERLAP_CHARS = 100
 
 TOP_K = 3
 
+# Embedding isteklerini bu boyutta gruplar halinde gönderiyoruz. Büyük bir
+# dosyanın yüzlerce parçasını tek seferde göndermek, Foundry Local'ın yerel
+# embedding servisinde isteğin iptal edilmesine ("Operation was cancelled")
+# yol açabiliyor; küçük gruplar bu riski ortadan kaldırıyor.
+EMBEDDING_BATCH_SIZE = 16
+
 # --- Uzman Java Eğitmeni kimliği ---
 # Bilgi tabanı "Think Java" kitabı ve "Algoritma ve Programlama" ders
 # slaytlarından oluşur; eğitmen özellikle OOP, kalıtım, kurucu metodlar,

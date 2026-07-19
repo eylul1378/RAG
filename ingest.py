@@ -9,7 +9,7 @@ import os
 
 from PyPDF2 import PdfReader
 
-from config import CHUNK_OVERLAP_CHARS, CHUNK_SIZE_CHARS, DOCUMENTS_DIR
+from config import CHUNK_OVERLAP_CHARS, CHUNK_SIZE_CHARS, DOCUMENTS_DIR, EMBEDDING_BATCH_SIZE
 from database import clear_chunks, count_chunks, init_db, insert_chunk
 from foundry_client import embed_texts
 
@@ -91,12 +91,14 @@ def run_ingestion() -> dict:
             skipped.append(filename)
             continue
 
-        # Foundry Local'a tek seferde (batch) embedding isteği gönderiyoruz;
-        # bu, dosya başına tek bir yerel model çağrısı yapılmasını sağlar.
-        embeddings = embed_texts(chunks)
-
-        for chunk_content, embedding in zip(chunks, embeddings):
-            insert_chunk(source=filename, content=chunk_content, embedding=embedding)
+        # Foundry Local'a EMBEDDING_BATCH_SIZE'lık gruplar halinde istek
+        # gönderiyoruz. Yüzlerce parçayı tek seferde göndermek, yerel
+        # embedding servisinde isteğin iptal edilmesine yol açabiliyor.
+        for i in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
+            batch = chunks[i : i + EMBEDDING_BATCH_SIZE]
+            embeddings = embed_texts(batch)
+            for chunk_content, embedding in zip(batch, embeddings):
+                insert_chunk(source=filename, content=chunk_content, embedding=embedding)
 
         files_processed += 1
 
