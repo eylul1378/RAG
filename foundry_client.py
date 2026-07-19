@@ -81,7 +81,13 @@ def generate_answer(system_prompt: str, context_chunks: list[str], question: str
 
     if context_chunks:
         context_text = "\n\n---\n\n".join(context_chunks)
-        user_content = f"Bağlam:\n{context_text}\n\nSoru: {question}"
+        # Küçük modeller sistem promptundaki kuralları bazen es geçebiliyor;
+        # kaynak gösterme talimatını her turda soruyla birlikte tekrarlamak
+        # (sistem promptuna ek olarak) uyumu belirgin şekilde artırıyor.
+        user_content = (
+            f"Bağlam:\n{context_text}\n\nSoru: {question}\n\n"
+            "Unutma: Yanıtının en sonuna 'Kaynak: <dosya adı>' şeklinde kaynağı ekle."
+        )
     else:
         # Hiç bağlam bulunamadıysa modeli yine de bilgilendiriyoruz ki
         # "bilmiyorum" cevabını verebilsin, uydurma bir cevap üretmesin.
