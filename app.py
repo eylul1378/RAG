@@ -1,52 +1,73 @@
 """
-Yerel RAG AI Asistanı - Streamlit arayüzü.
+Java Eğitmeni - Streamlit arayüzü.
 
-Tamamen çevrimdışı çalışır: embedding ve sohbet modelleri Microsoft Foundry
-Local üzerinden bu makinede çalıştırılır, hiçbir soru veya belge içeriği
-internete gönderilmez.
+Tamamen çevrimdışı çalışan, Think Java kitabı ve Algoritma ve Programlama ders
+slaytlarıyla beslenen uzman bir Java eğitmeni. Embedding ve sohbet modelleri
+Microsoft Foundry Local üzerinden bu makinede çalıştırılır, hiçbir soru veya
+belge içeriği internete gönderilmez.
+
+Not: Bilgi tabanı önceden (arka planda) hazırlanır -- bu arayüzde belge
+yükleme/işleme kontrolü YOKTUR. Yeni belge eklemek için ingest.py script'i
+ayrıca çalıştırılır.
 """
 import streamlit as st
 
-from config import SYSTEM_PROMPT
+from config import DEFAULT_EXPLANATION_LEVEL, EXPLANATION_LEVELS, build_system_prompt
 from database import count_chunks, get_top_chunks, init_db
 from foundry_client import generate_answer
-from ingest import run_ingestion
 
-st.set_page_config(page_title="Yerel RAG Asistanı", page_icon="📚")
+st.set_page_config(page_title="Java Eğitmeni", page_icon="☕")
 
 init_db()
 
-st.title("📚 Yerel RAG AI Asistanı")
-st.caption("Microsoft Foundry Local ile tamamen çevrimdışı çalışan belge soru-cevap asistanı")
+# --- Java temalı görünüm: turuncu + lacivert vurgular ---
+st.markdown(
+    """
+    <style>
+    :root {
+        --java-orange: #F89820;
+        --java-navy: #2A5B84;
+    }
+    h1, h2, h3 { color: var(--java-navy); }
+    [data-testid="stSidebar"] {
+        border-right: 3px solid var(--java-orange);
+    }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+        color: var(--java-orange);
+    }
+    .stChatInput, [data-testid="stChatInput"] {
+        border: 1px solid var(--java-orange) !important;
+    }
+    div[data-testid="stChatMessage"] {
+        border-left: 3px solid var(--java-navy);
+        padding-left: 0.6rem;
+    }
+    hr { border-color: var(--java-orange) !important; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-# --- Kenar çubuğu: belge işleme (ingestion) kontrolü ---
+st.title("☕ Java Eğitmeni")
+st.caption("OOP, kalıtım, kurucu metodlar, stack/heap ve koleksiyon yapıları üzerine uzmanlaşmış yerel yapay zeka eğitmeni")
+
+# --- Kenar çubuğu: yalnızca kişiselleştirme ayarları (belge işleme kontrolü YOK) ---
 with st.sidebar:
-    st.header("Belge Yönetimi")
-    st.write(f"Veritabanında şu anda **{count_chunks()}** belge parçası (chunk) var.")
-    st.write("Yeni belge eklediysen veya mevcut belgeleri güncellediysen aşağıdaki butona tıkla.")
-
-    if st.button("📥 Belgeleri Veritabanına İşle", use_container_width=True):
-        with st.spinner("Belgeler okunuyor, parçalara bölünüyor ve Foundry Local ile vektörleştiriliyor..."):
-            try:
-                # ingest.run_ingestion() -> documents/ klasörünü okur, parçalara
-                # böler ve her parçayı Foundry Local embedding modeliyle
-                # vektörleştirip SQLite'a kaydeder.
-                result = run_ingestion()
-            except Exception as exc:
-                st.error(f"Belge işleme sırasında bir hata oluştu: {exc}")
-            else:
-                st.success(
-                    f"{result['files_processed']} dosya işlendi, "
-                    f"{result['chunks_created']} parça veritabanına kaydedildi."
-                )
-                if result["skipped"]:
-                    st.warning(
-                        "Atlanan dosyalar (desteklenmeyen tür veya boş içerik): "
-                        + ", ".join(result["skipped"])
-                    )
+    st.header("⚙️ Ayarlar")
+    explanation_level = st.radio(
+        "Anlatım Seviyesi",
+        options=list(EXPLANATION_LEVELS.keys()),
+        index=list(EXPLANATION_LEVELS.keys()).index(DEFAULT_EXPLANATION_LEVEL),
+        key="explanation_level",
+        help="Yanıtların ne kadar teknik/detaylı olacağını belirler.",
+    )
 
     st.divider()
-    st.caption("Desteklenen dosya türleri: PDF, TXT. Dosyalarını `documents/` klasörüne koy.")
+    chunk_count = count_chunks()
+    if chunk_count > 0:
+        st.caption(f"📚 Bilgi tabanı hazır — {chunk_count} belge parçası indekslendi.")
+    else:
+        st.caption("📚 Bilgi tabanı henüz hazırlanmadı.")
 
 # --- Sohbet geçmişi ---
 if "messages" not in st.session_state:
@@ -56,7 +77,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-question = st.chat_input("Belgeler hakkında bir soru sor...")
+question = st.chat_input("Java hakkında bir soru sor...")
 
 if question:
     st.session_state.messages.append({"role": "user", "content": question})
@@ -68,22 +89,27 @@ if question:
 
         if count_chunks() == 0:
             answer = (
-                "Veritabanında henüz hiç belge yok. Lütfen önce kenar çubuğundaki "
-                "'Belgeleri Veritabanına İşle' butonuna tıkla."
+                "Bilgi tabanı henüz hazır değil. Lütfen dersin sorumlusuyla iletişime geçip "
+                "kaynak belgelerin (Think Java, ders slaytları) yüklenmesini bekle."
             )
             st.markdown(answer)
         else:
-            with st.spinner("İlgili belge parçaları aranıyor ve yanıt üretiliyor..."):
+            with st.spinner("İlgili kaynak parçaları aranıyor ve yanıt hazırlanıyor..."):
                 try:
                     # 1) Retrieval: soruyu Foundry Local embedding modeliyle
                     #    vektörleştirip SQLite'taki en alakalı parçaları buluyoruz.
                     top_chunks = get_top_chunks(question)
-                    context_texts = [chunk["content"] for chunk in top_chunks]
+                    # Her parçayı kaynak etiketiyle birlikte gönderiyoruz ki model
+                    # yanıtın sonuna doğru "Kaynak: ..." bilgisini ekleyebilsin.
+                    context_texts = [
+                        f"[Kaynak: {chunk['source']}]\n{chunk['content']}" for chunk in top_chunks
+                    ]
 
-                    # 2) Generation: bulunan bağlamı ve soruyu Foundry Local'da
-                    #    çalışan yerel LLM'e (ör. Phi-3.5 Mini) sistem promptuyla
-                    #    birlikte gönderip cevabı alıyoruz.
-                    answer = generate_answer(SYSTEM_PROMPT, context_texts, question)
+                    # 2) Generation: bulunan bağlamı, soruyu ve seçilen anlatım
+                    #    seviyesini Foundry Local'da çalışan yerel LLM'e gönderip
+                    #    cevabı alıyoruz.
+                    system_prompt = build_system_prompt(st.session_state.explanation_level)
+                    answer = generate_answer(system_prompt, context_texts, question)
                 except Exception as exc:
                     answer = f"Bir hata oluştu: {exc}"
 
