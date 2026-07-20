@@ -1,6 +1,7 @@
 """SQLite işlemleri: belge parçalarını (chunk) ve embedding vektörlerini saklama/okuma."""
 import json
 import os
+import random
 import sqlite3
 
 import numpy as np
@@ -100,3 +101,23 @@ def get_top_chunks(query: str, top_k: int = TOP_K) -> list[dict]:
 
     scored.sort(key=lambda pair: pair[0], reverse=True)
     return [chunk for _similarity, chunk in scored[:top_k]]
+
+
+def get_random_chunk(source_contains: str | None = None) -> dict | None:
+    """Mülakat Senaryosu modu için rastgele bir chunk seçer.
+
+    source_contains verilirse, kaynak dosya adında bu alt metni içeren
+    chunk'lar arasından (örn. bir mülakat-soruları dosyası) seçim yapar;
+    eşleşen olmazsa (veya parametre verilmezse) tüm chunk'lar arasından seçer.
+    """
+    all_chunks = get_all_chunks()
+    if not all_chunks:
+        return None
+
+    candidates = all_chunks
+    if source_contains:
+        filtered = [c for c in all_chunks if source_contains.lower() in c["source"].lower()]
+        if filtered:
+            candidates = filtered
+
+    return random.choice(candidates)
