@@ -79,10 +79,21 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / denom)
 
 
+# Bağlam dışı bir soru (örn. konu kitaplarımızda hiç geçmeyen bir dil/konu)
+# sorulduğunda bile en yakın chunk'lar sıfırdan uzak bir skor alabiliyor --
+# çünkü "en iyi eşleşme" her zaman bir şeydir, alakalı olması gerekmez. Bu
+# eşiğin altında kalan chunk'ları eleyerek modelin "bulamadım" demesini
+# (uydurmak yerine) kolaylaştırıyoruz. Değer, gerçek sorgularla ölçülerek
+# kalibre edildi: açıkça alakasız sorular ~0.23-0.30, gerçekten alakalı
+# sorular ~0.55+ benzerlik skoru alıyor.
+MIN_SIMILARITY = 0.50
+
+
 def get_top_chunks(query: str, top_k: int = TOP_K) -> list[dict]:
     """Sorguyu Foundry Local ile vektörleştirir, SQLite'taki tüm vektörleri çekip
     kosinüs benzerliğini Python'da (numpy ile) yerel olarak hesaplar ve en
-    alakalı top_k parçayı döndürür.
+    alakalı top_k parçayı döndürür. MIN_SIMILARITY altındaki eşleşmeler
+    (muhtemelen alakasız sorular) elenir.
 
     Küçük ölçekli bir doküman koleksiyonu için brute-force karşılaştırma
     (tüm vektörleri belleğe okuyup tek tek karşılaştırma) yeterlidir; daha
@@ -100,7 +111,7 @@ def get_top_chunks(query: str, top_k: int = TOP_K) -> list[dict]:
         scored.append((similarity, chunk))
 
     scored.sort(key=lambda pair: pair[0], reverse=True)
-    return [chunk for _similarity, chunk in scored[:top_k]]
+    return [chunk for similarity, chunk in scored[:top_k] if similarity >= MIN_SIMILARITY]
 
 
 def get_random_chunk(source_contains: str | None = None) -> dict | None:

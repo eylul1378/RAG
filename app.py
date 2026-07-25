@@ -18,6 +18,8 @@ Not: Bilgi tabanı önceden (arka planda) hazırlanır -- bu arayüzde belge
 yükleme/işleme kontrolü YOKTUR. Yeni belge eklemek için ingest.py script'i
 ayrıca çalıştırılır.
 """
+import re
+
 import streamlit as st
 
 from config import (
@@ -30,6 +32,23 @@ from config import (
 )
 from database import count_chunks, get_random_chunk, get_top_chunks, init_db
 from foundry_client import generate_answer
+
+# GitHub mülakat soru bankaları çoğunlukla hazır "Soru: ... Cevap: ..." çiftleri
+# içeriyor; küçük model, sadece soru sorması gerekirken bazen cevabı da
+# (kod örnekleriyle birlikte) kopyalayabiliyor -- INTERVIEW_QUESTION_PROMPT'taki
+# yasak talimatına rağmen. Bu, prompt'a güvenmek yerine çıktıyı ilk "cevap
+# göstergesi" işaretinde (veya kod bloğunda) kesen deterministik bir güvenlik ağı.
+_ANSWER_LEAK_PATTERN = re.compile(
+    r"(cevap\s*[:\-]|answer\s*[:\-]|```)", re.IGNORECASE
+)
+
+
+def _strip_leaked_answer(text: str) -> str:
+    match = _ANSWER_LEAK_PATTERN.search(text)
+    if match:
+        text = text[: match.start()]
+    return text.strip()
+
 
 st.set_page_config(page_title="Java Eğitmeni", page_icon="☕")
 
@@ -100,6 +119,7 @@ with st.sidebar:
                             reference_context,
                             "Bu bilgiye dayanarak bana tek bir mülakat sorusu sor.",
                         )
+                        posed_question = _strip_leaked_answer(posed_question)
                     except Exception as exc:
                         posed_question = f"Bir hata oluştu: {exc}"
                         chunk = None
@@ -165,26 +185,36 @@ if question:
                 st.caption("Yeni bir soru için kenar çubuğundaki '🎯 Yeni Mülakat Sorusu' butonuna tıkla.")
 
         else:
-            with st.spinner("İlgili kaynak parçaları aranıyor ve yanıt hazırlanıyor..."):
-                try:
-                    # 1) Retrieval: soruyu Foundry Local embedding modeliyle
-                    #    vektörleştirip SQLite'taki en alakalı parçaları buluyoruz.
-                    top_chunks = get_top_chunks(question)
-                    # Her parçayı kaynak etiketiyle birlikte gönderiyoruz ki model
-                    # yanıtın sonuna doğru "Kaynak: ..." bilgisini ekleyebilsin.
-                    context_texts = [
-                        f"[Kaynak: {chunk['source']}]\n{chunk['content']}" for chunk in top_chunks
-                    ]
+            # 1) Retrieval: soruyu Foundry Local embedding modeliyle vektörleştirip
+            #    SQLite'taki yeterince alakalı parçaları buluyoruz (get_top_chunks
+            #    bir benzerlik eşiğinin altındaki eşleşmeleri zaten eliyor).
+            top_chunks = get_top_chunks(question)
 
-                    # 2) Generation: bulunan bağlamı, soruyu ve seçilen anlatım
-                    #    modunu Foundry Local'da çalışan yerel LLM'e gönderip
-                    #    cevabı alıyoruz (model İngilizce bağlamdan Türkçe yanıt üretir).
-                    system_prompt = build_system_prompt(explanation_mode)
-                    answer = generate_answer(system_prompt, context_texts, question)
-                except Exception as exc:
-                    answer = f"Bir hata oluştu: {exc}"
+            if not top_chunks:
+                # Küçük modeller "bağlam yok, uydurma" talimatına rağmen kendi
+                # genel bilgisinden cevap uydurabiliyor (test edildi, güvenilmez).
+                # Bu yüzden LLM'i hiç çağırmadan -- hem daha hızlı hem %100
+                # garantili -- doğrudan Python'da "bulamadım" cevabını veriyoruz.
+                answer = "Bu bilgiyi belgelerde bulamadım."
+                st.markdown(answer)
+            else:
+                with st.spinner("İlgili kaynak parçaları aranıyor ve yanıt hazırlanıyor..."):
+                    try:
+                        # Her parçayı kaynak etiketiyle birlikte gönderiyoruz ki
+                        # model yanıtın sonuna "Kaynak: ..." bilgisini ekleyebilsin.
+                        context_texts = [
+                            f"[Kaynak: {chunk['source']}]\n{chunk['content']}" for chunk in top_chunks
+                        ]
 
-            st.markdown(answer)
+                        # 2) Generation: bulunan bağlamı, soruyu ve seçilen anlatım
+                        #    modunu Foundry Local'da çalışan yerel LLM'e gönderip
+                        #    cevabı alıyoruz (model İngilizce bağlamdan Türkçe yanıt üretir).
+                        system_prompt = build_system_prompt(explanation_mode)
+                        answer = generate_answer(system_prompt, context_texts, question)
+                    except Exception as exc:
+                        answer = f"Bir hata oluştu: {exc}"
+
+                st.markdown(answer)
 
             if top_chunks:
                 with st.expander("Kullanılan kaynak parçalar"):

@@ -36,8 +36,10 @@ BASE_SYSTEM_PROMPT = (
     "anlayıp SEN HER ZAMAN TÜRKÇE yanıt ver; İngilizce metni olduğu gibi kopyalama, "
     "Türkçeye açıklayarak aktar. Kod örneklerini olduğu gibi (İngilizce değişken/metod "
     "isimleriyle) koru, sadece açıklama metnini Türkçeleştir.\n\n"
-    "SADECE sana verilen bağlam metinlerini kullanarak yanıtla. Bilgi bağlamda yoksa "
-    "kesinlikle uydurma; sadece bu bilgiyi kaynaklarda bulamadığını belirt. "
+    "SADECE sana verilen bağlam metinlerini kullanarak yanıtla. Bağlam sana "
+    "verilmiş olsa bile, SORUYU GERÇEKTEN YANITLAMIYORSA (örn. başka bir "
+    "programlama dili veya alakasız bir konu hakkındaysa) bunu kullanma -- "
+    "kesinlikle uydurma, sadece bu bilgiyi kaynaklarda bulamadığını belirt. "
     "Yanıtının en sonuna mutlaka bilgiyi aldığın kaynağı ekle "
     "(Örn: Kaynak: Think_Java.pdf veya java-interview-questions.md)."
 )

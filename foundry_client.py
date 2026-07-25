@@ -92,9 +92,17 @@ def generate_answer(system_prompt: str, context_chunks: list[str], question: str
             "kez yazma, cevabı bir kez ve net şekilde ver."
         )
     else:
-        # Hiç bağlam bulunamadıysa modeli yine de bilgilendiriyoruz ki
-        # "bilmiyorum" cevabını verebilsin, uydurma bir cevap üretmesin.
-        user_content = f"Bağlam bulunamadı.\n\nSoru: {question}"
+        # Hiç bağlam bulunamadıysa (retrieval hiçbir yeterince alakalı chunk
+        # bulamadı) -- küçük modeller "sadece bağlamı kullan" kuralını görmezden
+        # gelip kendi genel bilgisinden cevap uydurma eğiliminde olduğundan,
+        # burada TEK kabul edilebilir yanıtı doğrudan komut olarak veriyoruz.
+        user_content = (
+            f"Soru: {question}\n\n"
+            "Bu soruyla ilgili bilgi tabanında (Java ders materyalleri) hiçbir "
+            "alakalı içerik bulunamadı. Kendi genel bilgini KULLANMA, cevap "
+            "UYDURMA. SADECE şu cevabı ver, başka hiçbir şey ekleme: "
+            "\"Bu bilgiyi belgelerde bulamadım.\""
+        )
 
     # get_chat_client() her çağrıldığında YENİ bir istemci nesnesi döndürüyor;
     # bu yüzden ayarları (max_tokens) ve complete_chat() çağrısını AYNI nesne
