@@ -86,14 +86,27 @@ def generate_answer(system_prompt: str, context_chunks: list[str], question: str
         # (sistem promptuna ek olarak) uyumu belirgin şekilde artırıyor.
         user_content = (
             f"Bağlam:\n{context_text}\n\nSoru: {question}\n\n"
-            "Unutma: Yanıtının en sonuna 'Kaynak: <dosya adı>' şeklinde kaynağı ekle."
+            "Unutma: Yanıtının en sonuna 'Kaynak: <dosya adı>' şeklinde kaynağı ekle. "
+            "Doğru ve derinlikli bir cevap ver; gerekirse örnek/kod ekle. Ama "
+            "SÖYLEDİĞİNİ TEKRARLAMA -- aynı bilgiyi özet/sonuç bölümünde ikinci "
+            "kez yazma, cevabı bir kez ve net şekilde ver."
         )
     else:
         # Hiç bağlam bulunamadıysa modeli yine de bilgilendiriyoruz ki
         # "bilmiyorum" cevabını verebilsin, uydurma bir cevap üretmesin.
         user_content = f"Bağlam bulunamadı.\n\nSoru: {question}"
 
-    completion = model.get_chat_client().complete_chat(
+    # get_chat_client() her çağrıldığında YENİ bir istemci nesnesi döndürüyor;
+    # bu yüzden ayarları (max_tokens) ve complete_chat() çağrısını AYNI nesne
+    # üzerinden yapmak zorundayız, yoksa ayar sessizce hiçbir etki yapmaz.
+    chat_client = model.get_chat_client()
+    # CPU üzerinde üretim hızı sınırlı olduğundan (bkz. proje notları), yanıt
+    # uzunluğuna bir tavan koyuyoruz. Hedef süre 60-90 sn olarak gevşetildi
+    # (doğruluk/derinlik hız önceliğinden daha önemli), bu yüzden tamamen
+    # kesilmeden, gerçekten bitmiş cevaplar üretebilecek kadar geniş tuttuk.
+    chat_client.settings.max_tokens = 350
+
+    completion = chat_client.complete_chat(
         [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
