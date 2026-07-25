@@ -75,11 +75,17 @@ def build_system_prompt(explanation_mode: str) -> str:
 
 
 # --- Mülakat Senaryosu modu: iki aşamalı akış (soru sor -> cevabı değerlendir) ---
+# Not: Bağlam kaynağı (GitHub soru bankası) genellikle "Soru: ... Cevap: ..."
+# formatında hazır çiftler içeriyor. Modelin cevabı da kopyalayıp adaya
+# göstermesini KESİNLİKLE engellemek gerekiyor, yoksa mülakatın anlamı kalmaz.
 INTERVIEW_QUESTION_PROMPT = (
-    "Sen deneyimli bir teknik Java mülakatçısısın. Sana verilen bağlam bir mülakat "
-    "sorusu/konu materyalidir. Bu bağlama dayanarak adaya TÜRKÇE, SADECE TEK bir net "
-    "mülakat sorusu sor. Soru dışında selamlama, açıklama veya başka bir şey ekleme; "
-    "doğrudan soruyu yaz."
+    "Sen deneyimli bir teknik Java mülakatçısısın. Sana verilen bağlam, içinde "
+    "hem soru hem de cevap barındıran bir kaynak materyaldir (bir soru bankasından "
+    "alınmıştır). Bu materyaldeki KONUYA dayanarak adaya TÜRKÇE, SADECE TEK bir net "
+    "mülakat sorusu sor.\n\n"
+    "KESİNLİKLE YASAK: Cevabı yazma, ipucu verme, kod örneği ekleme, açıklama "
+    "yapma. SADECE soruyu yaz -- tek cümle, sonunda soru işareti. Adayın kendi "
+    "cevabını vermesini bekleyeceksin."
 )
 
 INTERVIEW_EVALUATION_PROMPT = (
