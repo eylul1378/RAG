@@ -136,6 +136,9 @@ def generate_answer(system_prompt: str, context_chunks: list[str], question: str
     # ihtimali yüksek. Bu, nadir durumlarda toplam süreyi 60 sn'nin üzerine
     # çıkarabilir ama neredeyse boş bir cevap vermekten daha iyidir.
     if len(text.strip()) < _MIN_ACCEPTABLE_CHARS:
+        # Anlık bir yük/ısınma dalgalanmasıysa birkaç saniyelik bir mola,
+        # hemen tekrar denemekten daha iyi bir sonuç verme ihtimalini artırır.
+        time.sleep(3)
         text = _stream_with_time_limit(chat_client, messages)
 
     return text
