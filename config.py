@@ -13,7 +13,7 @@ CHAT_MODEL_ALIAS = "phi-3.5-mini"
 CHUNK_SIZE_CHARS = 800
 CHUNK_OVERLAP_CHARS = 100
 
-TOP_K = 2
+TOP_K = 1
 
 # Embedding isteklerini bu boyutta gruplar halinde gönderiyoruz. Büyük bir
 # dosyanın yüzlerce parçasını tek seferde göndermek, Foundry Local'ın yerel
