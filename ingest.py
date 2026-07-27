@@ -56,14 +56,56 @@ def extract_text(path: str) -> str:
     raise ValueError(f"Desteklenmeyen dosya türü: {ext}")
 
 
+def _split_long_paragraph(paragraph: str, chunk_size: int) -> list[str]:
+    """Tek başına chunk_size'ı aşan bir paragrafı, mümkünse cümle sınırlarında,
+    değilse (noktalama içermeyen uzun bir blok ise) ham karakter dilimleriyle böler.
+
+    Bu olmadan chunk_text() tek uzun bir paragrafı hiç bölmeden olduğu gibi bir
+    parçaya koyabiliyordu (gözlemlenen bir örnekte 1662 karakter, yapılandırılan
+    800 sınırının iki katı) -- büyük bir parça, CPU'da üretim sırasında prefill
+    süresini patlatıp neredeyse boş cevaplara yol açabiliyor.
+    """
+    if len(paragraph) <= chunk_size:
+        return [paragraph]
+
+    sentences = re.split(r"(?<=[.!?])\s+", paragraph)
+    pieces: list[str] = []
+    current = ""
+    for sentence in sentences:
+        if current and len(current) + len(sentence) + 1 > chunk_size:
+            pieces.append(current.strip())
+            current = sentence
+        else:
+            current = f"{current} {sentence}".strip() if current else sentence
+    if current.strip():
+        pieces.append(current.strip())
+
+    # Tek bir "cümle" bile chunk_size'ı aşıyorsa (örn. noktalama işareti
+    # olmayan uzun bir kod bloğu), son çare olarak ham karakter dilimleme yap.
+    final_pieces: list[str] = []
+    for piece in pieces:
+        if len(piece) <= chunk_size:
+            final_pieces.append(piece)
+        else:
+            for i in range(0, len(piece), chunk_size):
+                final_pieces.append(piece[i : i + chunk_size])
+    return final_pieces
+
+
 def chunk_text(text: str, chunk_size: int = CHUNK_SIZE_CHARS, overlap: int = CHUNK_OVERLAP_CHARS) -> list[str]:
     """Metni paragraflara göre böler, ardından paragrafları chunk_size sınırına kadar
     gruplayarak pasaj düzeyinde (yaklaşık 1-3 paragraf) parçalar oluşturur.
     Bağlamın parçalar arasında kopmaması için küçük bir karakter örtüşmesi (overlap) eklenir.
     """
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    if not paragraphs:
+    raw_paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    if not raw_paragraphs:
         return []
+
+    # Aşırı uzun paragrafları önceden böl ki aşağıdaki gruplama hiçbir zaman
+    # chunk_size'ı ciddi şekilde aşan bir parça üretmesin.
+    paragraphs: list[str] = []
+    for para in raw_paragraphs:
+        paragraphs.extend(_split_long_paragraph(para, chunk_size))
 
     chunks: list[str] = []
     current = ""
