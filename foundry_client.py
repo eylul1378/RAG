@@ -28,9 +28,15 @@ from config import CHAT_MODEL_ALIAS, EMBEDDING_MODEL_ALIAS
 APP_NAME = "rag-yerel-asistan"
 
 # Hedef: 60 saniyenin altında yanıt. Retrieval ~7 sn sürüyor ve kesme
-# kontrolü chunk'lar arasında yapıldığından birkaç saniyelik sarkma
-# gözlemlendi (bkz. proje notları); bu yüzden geniş bir pay bırakıyoruz.
-_MAX_GENERATION_SECONDS = 35
+# kontrolü chunk'lar arasında yapıldığından ~10 sn'lik bir sarkma
+# gözlemlendi (bkz. proje notları); bunu hesaba katarak bütçeyi mümkün
+# olduğunca doldurup 58 sn civarında toplam süre hedefliyoruz.
+_MAX_GENERATION_SECONDS = 41
+
+# Bu karakter sayısının altındaki bir cevap, prefill'in zaman bütçesinin
+# neredeyse tamamını yiyip decode'a pay bırakmadığı "şanssız" bir çalışmaya
+# işaret eder (bkz. proje notları) -- bu durumda bir kez daha deneriz.
+_MIN_ACCEPTABLE_CHARS = 60
 
 
 @lru_cache(maxsize=1)
@@ -93,9 +99,10 @@ def generate_answer(system_prompt: str, context_chunks: list[str], question: str
         user_content = (
             f"Bağlam:\n{context_text}\n\nSoru: {question}\n\n"
             "Unutma: Yanıtının en sonuna 'Kaynak: <dosya adı>' şeklinde kaynağı ekle. "
-            "Doğru ve derinlikli bir cevap ver; gerekirse örnek/kod ekle. Ama "
-            "SÖYLEDİĞİNİ TEKRARLAMA -- aynı bilgiyi özet/sonuç bölümünde ikinci "
-            "kez yazma, cevabı bir kez ve net şekilde ver."
+            "Yanıtın süre sınırıyla kesilebilir, bu yüzden ÖNCE sorunun doğrudan "
+            "cevabını 1-2 net cümleyle ver, SONRA (yer kalırsa) örnek/detay ekle "
+            "-- en önemli bilgi en başta olsun. SÖYLEDİĞİNİ TEKRARLAMA -- aynı "
+            "bilgiyi özet/sonuç bölümünde ikinci kez yazma."
         )
     else:
         # Hiç bağlam bulunamadıysa (retrieval hiçbir yeterince alakalı chunk
@@ -119,7 +126,19 @@ def generate_answer(system_prompt: str, context_chunks: list[str], question: str
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_content},
     ]
-    return _stream_with_time_limit(chat_client, messages)
+    text = _stream_with_time_limit(chat_client, messages)
+
+    # CPU'da prefill süresi aynı boyuttaki bağlamlar için bile büyük ölçüde
+    # dalgalanabiliyor (o anki sistem yüküne göre); bazen zaman bütçesinin
+    # neredeyse tamamı prefill'e gidip decode'a hiç pay kalmıyor ve neredeyse
+    # boş bir cevap dönüyor. Bu nadir "şanssız" durumu tespit edip BİR KEZ
+    # daha deniyoruz -- ikinci denemenin farklı bir zamanlamaya denk gelme
+    # ihtimali yüksek. Bu, nadir durumlarda toplam süreyi 60 sn'nin üzerine
+    # çıkarabilir ama neredeyse boş bir cevap vermekten daha iyidir.
+    if len(text.strip()) < _MIN_ACCEPTABLE_CHARS:
+        text = _stream_with_time_limit(chat_client, messages)
+
+    return text
 
 
 def _stream_with_time_limit(chat_client, messages: list[dict]) -> str:
