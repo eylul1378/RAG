@@ -83,22 +83,37 @@ def _extract_code(text: str) -> str | None:
     return None
 
 
+def _last_code_in(messages: list[dict]) -> str | None:
+    """Bir mod'un konuşmasındaki en son kod bloğunu bulur (terminal paneli için).
+    Sabit bir session_state alanında tutmak yerine her render'da buradan
+    türetiyoruz ki mod değişince veya bir kayıt silinince otomatik güncel kalsın."""
+    for message in reversed(messages):
+        if message["role"] == "assistant":
+            code = _extract_code(message["content"])
+            if code:
+                return code
+    return None
+
+
 st.set_page_config(page_title="JavaBot", page_icon="🤖", layout="wide")
 
 init_db()
 
 # --- Oturum durumu ---
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# Her mod kendi bağımsız sohbetini tutar (conversations[mod_adı]) ki bir
+# moddan diğerine geçince önceki modun konuşması ekranda kalmasın -- yeni
+# seçilen mod temiz bir ekranla (veya daha önce o modda bırakılan yerden)
+# başlasın, eski konuşma sadece "Sohbet Geçmişi" listesinden erişilebilsin.
+if "conversations" not in st.session_state:
+    st.session_state.conversations = {mode: [] for mode in EXPLANATION_MODES}
 if "interview_chunk" not in st.session_state:
     st.session_state.interview_chunk = None
 if "explanation_mode" not in st.session_state:
     st.session_state.explanation_mode = DEFAULT_EXPLANATION_MODE
-if "last_code" not in st.session_state:
-    st.session_state.last_code = None
 
 active_mode = st.session_state.explanation_mode
 active_color = MODE_COLORS[active_mode]
+current_messages = st.session_state.conversations[active_mode]
 
 # --- Koyu, terminal/kod-editörü esintili tema (Figma tasarımına göre) ---
 st.markdown(
@@ -244,36 +259,36 @@ with st.sidebar:
                         chunk = None
 
                 st.session_state.interview_chunk = chunk
-                st.session_state.messages.append({"role": "assistant", "content": posed_question})
+                st.session_state.conversations[INTERVIEW_MODE].append(
+                    {"role": "assistant", "content": posed_question}
+                )
                 st.rerun()
 
     st.markdown('<div class="section-label">Sohbet Geçmişi</div>', unsafe_allow_html=True)
 
-    # Sohbet geçmişi: her kullanıcı sorusu + ona ait yanıt bir "kayıt" sayılır,
-    # her kaydın yanında tek başına silinebilmesi için bir çöp kutusu butonu var.
-    user_indices = [i for i, m in enumerate(st.session_state.messages) if m["role"] == "user"]
-    if not user_indices:
-        st.caption("Henüz sohbet yok.")
-    else:
+    # Sohbet geçmişi TÜM modların sorularını listeler (hangi moda ait olduğu
+    # ikonla belirtilir) -- bir moddan diğerine geçildiğinde önceki modun
+    # konuşması ekrandan kalkar ama burada silinene kadar erişilebilir kalır.
+    # Her kullanıcı sorusu + ona ait yanıt bir "kayıt" sayılır, her kaydın
+    # yanında tek başına silinebilmesi için bir çöp kutusu butonu var.
+    any_history = False
+    for mode_name, icon in MODE_ICONS.items():
+        conv = st.session_state.conversations[mode_name]
+        user_indices = [i for i, m in enumerate(conv) if m["role"] == "user"]
         for idx in user_indices:
-            label = st.session_state.messages[idx]["content"]
-            label = (label[:28] + "…") if len(label) > 28 else label
+            any_history = True
+            label = conv[idx]["content"]
+            label = (label[:24] + "…") if len(label) > 24 else label
             col_label, col_delete = st.columns([5, 1])
-            col_label.markdown(f'<div class="history-item">{label}</div>', unsafe_allow_html=True)
-            if col_delete.button("🗑", key=f"del_{idx}"):
+            col_label.markdown(f'<div class="history-item">{icon} {label}</div>', unsafe_allow_html=True)
+            if col_delete.button("🗑", key=f"del_{mode_name}_{idx}"):
                 # Bu soruyu ve (varsa) hemen ardından gelen yanıtı kaldır.
-                end = idx + 2 if idx + 1 < len(st.session_state.messages) else idx + 1
-                del st.session_state.messages[idx:end]
-
-                # Terminal panelini güncel duruma göre yeniden hesapla --
-                # silinen kayıt en son gösterilen kod olabilir.
-                remaining_assistant = [
-                    m for m in st.session_state.messages if m["role"] == "assistant"
-                ]
-                st.session_state.last_code = (
-                    _extract_code(remaining_assistant[-1]["content"]) if remaining_assistant else None
-                )
+                end = idx + 2 if idx + 1 < len(conv) else idx + 1
+                del st.session_state.conversations[mode_name][idx:end]
                 st.rerun()
+
+    if not any_history:
+        st.caption("Henüz sohbet yok.")
 
     st.divider()
     chunk_count = count_chunks()
@@ -288,10 +303,10 @@ chat_col, terminal_col = st.columns([3, 2])
 with chat_col:
     st.markdown(f'<div class="javabot-label">— JAVABOT</div>', unsafe_allow_html=True)
 
-    if not st.session_state.messages:
+    if not current_messages:
         st.markdown("Merhaba. Ben Java konularında yardımcı olmak için buradayım.")
 
-    for message in st.session_state.messages:
+    for message in current_messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
@@ -299,7 +314,7 @@ with chat_col:
     question = st.chat_input(placeholder)
 
     if question:
-        st.session_state.messages.append({"role": "user", "content": question})
+        current_messages.append({"role": "user", "content": question})
         with st.chat_message("user"):
             st.markdown(question)
 
@@ -367,9 +382,7 @@ with chat_col:
                             st.markdown(chunk["content"])
                             st.divider()
 
-        # Terminal panelinde göstermek üzere yanıttaki kod bloğunu (varsa) sakla.
-        st.session_state.last_code = _extract_code(answer)
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+        current_messages.append({"role": "assistant", "content": answer})
 
         # Kenar çubuğundaki "Sohbet Geçmişi" listesi ve sağdaki terminal paneli
         # bu script çalışmasının BAŞINDA (mesaj eklenmeden önce) render edildiği
@@ -383,8 +396,12 @@ with terminal_col:
         "</div>"
     )
     st.markdown(f'<div class="terminal-box">{dots_html}', unsafe_allow_html=True)
-    if st.session_state.last_code:
-        st.code(st.session_state.last_code, language="java", line_numbers=True)
+    # Aktif modun konuşmasından türetilir -- mod değişince veya bir kayıt
+    # silinince otomatik olarak doğru moda ait kodu (veya hiç yoksa
+    # bekleme mesajını) gösterir.
+    last_code = _last_code_in(current_messages)
+    if last_code:
+        st.code(last_code, language="java", line_numbers=True)
     else:
         st.code("// Sistem hazır.\n// Sorunuzu bekliyorum.", language="java", line_numbers=True)
     st.markdown("</div>", unsafe_allow_html=True)
