@@ -360,7 +360,9 @@ with chat_col:
                     # genel bilgisinden cevap uydurabiliyor (test edildi, güvenilmez).
                     # Bu yüzden LLM'i hiç çağırmadan -- hem daha hızlı hem %100
                     # garantili -- doğrudan Python'da "bulamadım" cevabını veriyoruz.
-                    answer = "Bu bilgiyi belgelerde bulamadım."
+                    # (İngilizce: model artık İngilizce cevap verdiği için bu
+                    # yer tutucu da tutarlılık için İngilizce.)
+                    answer = "I could not find this information in the documents."
                     st.markdown(answer)
                 else:
                     with st.spinner("İlgili kaynak parçaları aranıyor ve yanıt hazırlanıyor..."):
