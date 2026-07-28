@@ -76,11 +76,15 @@ _CODE_BLOCK_PATTERN = re.compile(r"```(?:\w+)?\n?(.*?)```", re.DOTALL)
 
 
 def _extract_code(text: str) -> str | None:
-    match = _CODE_BLOCK_PATTERN.search(text)
-    if match:
-        code = match.group(1).strip()
-        return code or None
-    return None
+    """Yanıt genellikle adım adım küçük kod parçacıkları (örn. tek satırlık bir
+    import) ve en sonda hepsini birleştiren TAM bir örnek içeriyor. En UZUN
+    kod bloğunu seçiyoruz ki terminal panelinde küçük bir parça değil, en
+    kapsamlı/kullanışlı örnek görünsün."""
+    matches = _CODE_BLOCK_PATTERN.findall(text)
+    blocks = [m.strip() for m in matches if m.strip()]
+    if not blocks:
+        return None
+    return max(blocks, key=len)
 
 
 def _last_code_in(messages: list[dict]) -> str | None:
