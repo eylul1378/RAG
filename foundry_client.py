@@ -14,6 +14,7 @@ süreci içinde çalışır; ayrı bir HTTP sunucusu veya sistemde çalışan bi
 süreç-içi (in-process) ve tamamen çevrimdışıdır -- hiçbir istek
 internete çıkmaz.
 """
+import re
 import time
 from functools import lru_cache
 
@@ -27,11 +28,12 @@ from config import CHAT_MODEL_ALIAS, EMBEDDING_MODEL_ALIAS
 # bir klasörde tutar. Yalnızca harf/rakam/._- karakterlerine izin verilir.
 APP_NAME = "rag-yerel-asistan"
 
-# Hedef: 60 saniyenin altında yanıt. Retrieval ~7 sn sürüyor ve kesme
-# kontrolü chunk'lar arasında yapıldığından ~10 sn'lik bir sarkma
-# gözlemlendi (bkz. proje notları); bunu hesaba katarak bütçeyi mümkün
-# olduğunca doldurup 58 sn civarında toplam süre hedefliyoruz.
-_MAX_GENERATION_SECONDS = 41
+# Hedef gevşetildi: 60 sn'lik sert sınır, modelin bazı sorularda daha
+# içeriğe bile geçemeden kesilmesine yol açıyordu (özellikle kod istenen
+# sorularda). Artık ~2 dakikalık bir tavan içinde eksiksiz, doğru cevaplar
+# öncelikli. Retrieval ~7 sn sürüyor ve kesme kontrolü chunk'lar arasında
+# yapıldığından ~10 sn'lik bir sarkma gözlemlendi (bkz. proje notları).
+_MAX_GENERATION_SECONDS = 100
 
 # Bu karakter sayısının altındaki bir cevap, prefill'in zaman bütçesinin
 # neredeyse tamamını yiyip decode'a pay bırakmadığı "şanssız" bir çalışmaya
@@ -97,12 +99,15 @@ def generate_answer(system_prompt: str, context_chunks: list[str], question: str
         # kaynak gösterme talimatını her turda soruyla birlikte tekrarlamak
         # (sistem promptuna ek olarak) uyumu belirgin şekilde artırıyor.
         user_content = (
-            f"Bağlam:\n{context_text}\n\nSoru: {question}\n\n"
-            "Unutma: Yanıtının en sonuna 'Kaynak: <dosya adı>' şeklinde kaynağı ekle. "
-            "Yanıtın süre sınırıyla kesilebilir, bu yüzden ÖNCE sorunun doğrudan "
-            "cevabını 1-2 net cümleyle ver, SONRA (yer kalırsa) örnek/detay ekle "
-            "-- en önemli bilgi en başta olsun. SÖYLEDİĞİNİ TEKRARLAMA -- aynı "
-            "bilgiyi özet/sonuç bölümünde ikinci kez yazma."
+            f"Context:\n{context_text}\n\nQuestion: {question}\n\n"
+            "Remember: end your answer with 'Source: <file name>'. Give a "
+            "complete, correct, and well-explained answer -- do NOT repeat "
+            "yourself (don't restate the same information in a summary/"
+            "conclusion section), but don't hold back on detail or examples "
+            "where useful. If the question calls for a code example, you MUST "
+            "write the code between ```java and ``` markers (as a fenced code "
+            "block) -- do not embed it in plain text or quotes, otherwise it "
+            "will not show up in the on-screen code panel."
         )
     else:
         # Hiç bağlam bulunamadıysa (retrieval hiçbir yeterince alakalı chunk
@@ -110,11 +115,11 @@ def generate_answer(system_prompt: str, context_chunks: list[str], question: str
         # gelip kendi genel bilgisinden cevap uydurma eğiliminde olduğundan,
         # burada TEK kabul edilebilir yanıtı doğrudan komut olarak veriyoruz.
         user_content = (
-            f"Soru: {question}\n\n"
-            "Bu soruyla ilgili bilgi tabanında (Java ders materyalleri) hiçbir "
-            "alakalı içerik bulunamadı. Kendi genel bilgini KULLANMA, cevap "
-            "UYDURMA. SADECE şu cevabı ver, başka hiçbir şey ekleme: "
-            "\"Bu bilgiyi belgelerde bulamadım.\""
+            f"Question: {question}\n\n"
+            "No relevant content was found in the knowledge base (Java course "
+            "materials) for this question. Do NOT use your own general "
+            "knowledge, do NOT make anything up. ONLY give this answer, add "
+            "nothing else: \"I could not find this information in the documents.\""
         )
 
     chat_client = model.get_chat_client()
@@ -170,8 +175,27 @@ def _stream_with_time_limit(chat_client, messages: list[dict]) -> str:
             break
 
     text = "".join(collected).strip()
+    # Model bazen bir tekrar döngüsüne girip "000...0" gibi anlamsız bir
+    # yığın ürettikten SONRA normal şekilde duruyor (finish_reason geliyor) --
+    # yani bu her zaman zaman sınırı kesmesinden kaynaklanmıyor. Bu yüzden
+    # bu temizliği süre kesmesi olsun olmasın her zaman uyguluyoruz.
+    text = _strip_degenerate_tail(text)
     if truncated:
         text = _trim_to_sentence_boundary(text)
+    return text
+
+
+# Zaman sınırı tam olarak modelin bir tekrar döngüsüne girdiği ana denk
+# gelirse, çıktının sonu "000000...0" gibi anlamsız bir karakter yığınına
+# dönüşebiliyor (gözlemlenen bir örnek). Aynı karakterin 15+ kez art arda
+# tekrarı gerçek içerikte neredeyse hiç olmaz, bu yüzden güvenli bir işaret.
+_DEGENERATE_RUN_PATTERN = re.compile(r"(.)\1{14,}", re.DOTALL)
+
+
+def _strip_degenerate_tail(text: str) -> str:
+    match = _DEGENERATE_RUN_PATTERN.search(text)
+    if match:
+        text = text[: match.start()]
     return text
 
 
