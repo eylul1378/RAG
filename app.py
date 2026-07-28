@@ -2,22 +2,24 @@
 JavaBot - Streamlit arayüzü.
 
 Tamamen çevrimdışı çalışan, İngilizce kaynaklarla (Oracle Java dokümantasyonu,
-Think Java kitabı, GitHub mülakat soru bankaları) beslenen ama HER ZAMAN
-TÜRKÇE yanıt veren bir Java eğitmeni. Embedding ve sohbet modelleri Microsoft
-Foundry Local üzerinden bu makinede çalıştırılır, hiçbir soru veya belge
-içeriği internete gönderilmez.
+Think Java kitabı, GitHub mülakat soru bankaları) beslenen ve İNGİLİZCE yanıt
+veren bir Java eğitmeni (phi-3.5-mini ağırlıklı İngilizce eğitildiği için akıcılık/
+doğruluk açısından bu tercih edildi -- bkz. proje notları). Arayüz metinleri de
+(butonlar, etiketler) artık tamamen İngilizce. Embedding ve sohbet modelleri
+Microsoft Foundry Local üzerinden bu makinede çalıştırılır, hiçbir soru veya
+belge içeriği internete gönderilmez.
 
 Arayüz üç panelden oluşur (Figma tasarımına göre):
 - Sol: mod seçimi (her modun kendi vurgu rengi vardır) ve silinebilir sohbet
   geçmişi.
-- Orta: sohbet akışı ve "> ... ÇALIŞTIR" giriş kutusu.
+- Orta: sohbet akışı ve soru giriş kutusu.
 - Sağ: terminal görünümlü bir kod paneli -- en son yanıt kod içeriyorsa
   otomatik olarak orada gösterilir, içermiyorsa bekleme mesajı görünür.
 
 Üç anlatım modu vardır:
-- Bebek Adımları / Akademik Mod: normal retrieve-then-answer akışı, sadece
+- Baby Steps / Academic Mode: normal retrieve-then-answer akışı, sadece
   üslup/derinlik değişir (build_system_prompt).
-- Mülakat Senaryosu: farklı bir etkileşim modeli -- eğitmen önce bir soru
+- Interview Scenario: farklı bir etkileşim modeli -- eğitmen önce bir soru
   sorar (INTERVIEW_QUESTION_PROMPT), kullanıcı cevaplayınca o cevabı aynı
   referans bağlama göre değerlendirir (INTERVIEW_EVALUATION_PROMPT).
 
@@ -42,14 +44,22 @@ from foundry_client import generate_answer
 
 # Her modun kendi kimlik rengi ve ikonu var (Figma tasarımına göre).
 MODE_ICONS = {
-    "Bebek Adımları": "🏆",
-    "Akademik Mod": "🎓",
-    "Mülakat Senaryosu": "⚔️",
+    "Baby Steps": "🏆",
+    "Academic Mode": "🎓",
+    "Interview Scenario": "⚔️",
 }
 MODE_COLORS = {
-    "Bebek Adımları": "#4ADE80",
-    "Akademik Mod": "#F97316",
-    "Mülakat Senaryosu": "#F43F5E",
+    "Baby Steps": "#5A9E5A",
+    "Academic Mode": "#F8981D",
+    "Interview Scenario": "#E05C5C",
+}
+# Figma tasarımında terminal panelinin arka planı da moda göre değişiyor
+# (sadece vurgu rengi değil) -- Baby Steps: koyu yeşil-siyah, Academic Mode:
+# standart lacivert-siyah, Interview Scenario: koyu kırmızı-siyah.
+MODE_TERMINAL_BG = {
+    "Baby Steps": "#05120C",
+    "Academic Mode": "#060C17",
+    "Interview Scenario": "#140505",
 }
 
 # GitHub mülakat soru bankaları çoğunlukla hazır "Soru: ... Cevap: ..." çiftleri
@@ -117,6 +127,7 @@ if "explanation_mode" not in st.session_state:
 
 active_mode = st.session_state.explanation_mode
 active_color = MODE_COLORS[active_mode]
+active_terminal_bg = MODE_TERMINAL_BG[active_mode]
 current_messages = st.session_state.conversations[active_mode]
 
 # --- Koyu, terminal/kod-editörü esintili tema (Figma tasarımına göre) ---
@@ -124,15 +135,15 @@ st.markdown(
     f"""
     <style>
     :root {{
-        --bg-main: #0B1220;
-        --bg-panel: #0A0E17;
-        --bg-terminal: #05070C;
+        --bg-main: #0B162C;
+        --bg-panel: #060C17;
+        --bg-terminal: {active_terminal_bg};
         --border-subtle: #1E293B;
         --text-dim: #64748B;
         --active-color: {active_color};
     }}
     html, body, [class*="css"] {{
-        font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
+        font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
     }}
     .stApp {{ background-color: var(--bg-main); }}
     [data-testid="stSidebar"] {{
@@ -190,7 +201,7 @@ st.markdown(
     }}
     .terminal-dots {{
         padding: 0.6rem 0.8rem;
-        background-color: #0A0E17;
+        background-color: var(--bg-terminal);
         border-bottom: 1px solid var(--border-subtle);
     }}
     .terminal-dots span {{
@@ -227,7 +238,7 @@ st.markdown(
 # --- Kenar çubuğu: mod seçimi + silinebilir sohbet geçmişi ---
 with st.sidebar:
     st.markdown('<div class="javabot-title">🤖 JavaBot</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-label">Çalışma Modu</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Mode</div>', unsafe_allow_html=True)
 
     for mode_name, icon in MODE_ICONS.items():
         is_active = mode_name == active_mode
@@ -242,24 +253,24 @@ with st.sidebar:
 
     if active_mode == INTERVIEW_MODE:
         st.divider()
-        if st.button("🎯 Yeni Mülakat Sorusu", use_container_width=True):
+        if st.button("🎯 New Interview Question", use_container_width=True):
             # Öncelikle dosya adında "interview" geçen bir kaynaktan seç
             # (GitHub mülakat soru bankası); yoksa herhangi bir chunk'tan seç.
             chunk = get_random_chunk(source_contains="interview")
             if chunk is None:
-                st.warning("Mülakat sorusu üretmek için bilgi tabanında henüz belge yok.")
+                st.warning("There are no documents in the knowledge base yet to generate an interview question.")
             else:
-                with st.spinner("Soru hazırlanıyor..."):
+                with st.spinner("Preparing question..."):
                     try:
-                        reference_context = [f"[Kaynak: {chunk['source']}]\n{chunk['content']}"]
+                        reference_context = [f"[Source: {chunk['source']}]\n{chunk['content']}"]
                         posed_question = generate_answer(
                             INTERVIEW_QUESTION_PROMPT,
                             reference_context,
-                            "Bu bilgiye dayanarak bana tek bir mülakat sorusu sor.",
+                            "Based on this material, ask me a single interview question.",
                         )
                         posed_question = _strip_leaked_answer(posed_question)
                     except Exception as exc:
-                        posed_question = f"Bir hata oluştu: {exc}"
+                        posed_question = f"An error occurred: {exc}"
                         chunk = None
 
                 st.session_state.interview_chunk = chunk
@@ -268,7 +279,7 @@ with st.sidebar:
                 )
                 st.rerun()
 
-    st.markdown('<div class="section-label">Sohbet Geçmişi</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Chat History</div>', unsafe_allow_html=True)
 
     # Sohbet geçmişi TÜM modların sorularını listeler (hangi moda ait olduğu
     # ikonla belirtilir) -- bir moddan diğerine geçildiğinde önceki modun
@@ -285,21 +296,21 @@ with st.sidebar:
             label = (label[:24] + "…") if len(label) > 24 else label
             col_label, col_delete = st.columns([5, 1])
             col_label.markdown(f'<div class="history-item">{icon} {label}</div>', unsafe_allow_html=True)
-            if col_delete.button("🗑", key=f"del_{mode_name}_{idx}"):
+            if col_delete.button("✕", key=f"del_{mode_name}_{idx}"):
                 # Bu soruyu ve (varsa) hemen ardından gelen yanıtı kaldır.
                 end = idx + 2 if idx + 1 < len(conv) else idx + 1
                 del st.session_state.conversations[mode_name][idx:end]
                 st.rerun()
 
     if not any_history:
-        st.caption("Henüz sohbet yok.")
+        st.caption("No conversations yet.")
 
     st.divider()
     chunk_count = count_chunks()
     if chunk_count > 0:
-        st.caption(f"📚 Bilgi tabanı hazır — {chunk_count} belge parçası indekslendi.")
+        st.caption(f"📚 Knowledge base ready — {chunk_count} chunks indexed.")
     else:
-        st.caption("📚 Bilgi tabanı henüz hazırlanmadı.")
+        st.caption("📚 Knowledge base not ready yet.")
 
 # --- Ana alan: sohbet (sol) + terminal/kod paneli (sağ) ---
 chat_col, terminal_col = st.columns([3, 2])
@@ -308,13 +319,13 @@ with chat_col:
     st.markdown(f'<div class="javabot-label">— JAVABOT</div>', unsafe_allow_html=True)
 
     if not current_messages:
-        st.markdown("Merhaba. Ben Java konularında yardımcı olmak için buradayım.")
+        st.markdown("Hi. I'm here to help you with Java.")
 
     for message in current_messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    placeholder = "Mülakat sorusuna cevabını yaz..." if active_mode == INTERVIEW_MODE else "Java'ya bir şeyler sorun..."
+    placeholder = "Type your answer to the interview question..." if active_mode == INTERVIEW_MODE else "Ask something about Java..."
     question = st.chat_input(placeholder)
 
     if question:
@@ -327,34 +338,34 @@ with chat_col:
 
             if count_chunks() == 0:
                 answer = (
-                    "Bilgi tabanı henüz hazır değil. Lütfen dersin sorumlusuyla iletişime geçip "
-                    "kaynak belgelerin yüklenmesini bekle."
+                    "The knowledge base isn't ready yet. Please contact the course "
+                    "instructor and wait for the source documents to be indexed."
                 )
                 st.markdown(answer)
 
             elif active_mode == INTERVIEW_MODE:
                 if st.session_state.interview_chunk is None:
                     answer = (
-                        "Mülakata başlamak için kenar çubuğundaki "
-                        "'🎯 Yeni Mülakat Sorusu' butonuna tıkla."
+                        "Click the '🎯 New Interview Question' button in the "
+                        "sidebar to start the interview."
                     )
                     st.markdown(answer)
                 else:
-                    with st.spinner("Cevabın değerlendiriliyor..."):
+                    with st.spinner("Evaluating your answer..."):
                         try:
                             chunk = st.session_state.interview_chunk
-                            reference_context = [f"[Kaynak: {chunk['source']}]\n{chunk['content']}"]
+                            reference_context = [f"[Source: {chunk['source']}]\n{chunk['content']}"]
                             answer = generate_answer(
                                 INTERVIEW_EVALUATION_PROMPT,
                                 reference_context,
-                                f"Adayın cevabı: {question}",
+                                f"Candidate's answer: {question}",
                             )
                         except Exception as exc:
-                            answer = f"Bir hata oluştu: {exc}"
+                            answer = f"An error occurred: {exc}"
 
                     st.markdown(answer)
                     st.session_state.interview_chunk = None
-                    st.caption("Yeni bir soru için kenar çubuğundaki '🎯 Yeni Mülakat Sorusu' butonuna tıkla.")
+                    st.caption("Click '🎯 New Interview Question' in the sidebar for a new question.")
 
             else:
                 top_chunks = get_top_chunks(question)
@@ -364,27 +375,25 @@ with chat_col:
                     # genel bilgisinden cevap uydurabiliyor (test edildi, güvenilmez).
                     # Bu yüzden LLM'i hiç çağırmadan -- hem daha hızlı hem %100
                     # garantili -- doğrudan Python'da "bulamadım" cevabını veriyoruz.
-                    # (İngilizce: model artık İngilizce cevap verdiği için bu
-                    # yer tutucu da tutarlılık için İngilizce.)
                     answer = "I could not find this information in the documents."
                     st.markdown(answer)
                 else:
-                    with st.spinner("İlgili kaynak parçaları aranıyor ve yanıt hazırlanıyor..."):
+                    with st.spinner("Searching relevant sources and preparing an answer..."):
                         try:
                             context_texts = [
-                                f"[Kaynak: {chunk['source']}]\n{chunk['content']}" for chunk in top_chunks
+                                f"[Source: {chunk['source']}]\n{chunk['content']}" for chunk in top_chunks
                             ]
                             system_prompt = build_system_prompt(active_mode)
                             answer = generate_answer(system_prompt, context_texts, question)
                         except Exception as exc:
-                            answer = f"Bir hata oluştu: {exc}"
+                            answer = f"An error occurred: {exc}"
 
                     st.markdown(answer)
 
                 if top_chunks:
-                    with st.expander("Kullanılan kaynak parçalar"):
+                    with st.expander("Sources used"):
                         for chunk in top_chunks:
-                            st.markdown(f"**Kaynak:** {chunk['source']}")
+                            st.markdown(f"**Source:** {chunk['source']}")
                             st.markdown(chunk["content"])
                             st.divider()
 
@@ -409,5 +418,5 @@ with terminal_col:
     if last_code:
         st.code(last_code, language="java", line_numbers=True)
     else:
-        st.code("// Sistem hazır.\n// Sorunuzu bekliyorum.", language="java", line_numbers=True)
+        st.code("// System ready.\n// Waiting for your question.", language="java", line_numbers=True)
     st.markdown("</div>", unsafe_allow_html=True)

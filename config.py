@@ -30,8 +30,8 @@ EMBEDDING_BATCH_SIZE = 16
 # Not: Model artık TÜRKÇE değil İNGİLİZCE yanıt veriyor (bkz. proje notları --
 # phi-3.5-mini ağırlıklı İngilizce eğitilmiş küçük bir model; Türkçe çeviri
 # katmanı akıcılığı ciddi şekilde bozuyordu, kendi ana dilinde çok daha
-# tutarlı/doğru cevaplar üretiyor). Arayüz (butonlar, etiketler) Türkçe
-# kalmaya devam ediyor, sadece modelin ürettiği cevap metni İngilizce.
+# tutarlı/doğru cevaplar üretiyor). Arayüz metinleri (butonlar, etiketler,
+# mod adları) de tutarlılık için tamamen İngilizce'ye çevrildi.
 BASE_SYSTEM_PROMPT = (
     "You are an expert Java tutor. You have deep expertise in object-oriented "
     "programming (OOP), inheritance, constructors, stack/heap memory management, "
@@ -45,29 +45,29 @@ BASE_SYSTEM_PROMPT = (
     "(e.g. Source: Think_Java.pdf or java-interview-questions.md)."
 )
 
-# Kullanıcının kenar çubuğundan seçebileceği anlatım modları. "Mülakat
-# Senaryosu" diğer ikisinden farklıdır: build_system_prompt() ile değil,
+# Kullanıcının kenar çubuğundan seçebileceği anlatım modları. "Interview
+# Scenario" diğer ikisinden farklıdır: build_system_prompt() ile değil,
 # aşağıdaki özel INTERVIEW_* promptlarıyla ve app.py'deki ayrı bir
 # etkileşim akışıyla (soru sor -> cevabı değerlendir) çalışır.
 EXPLANATION_MODES = {
-    "Bebek Adımları": (
+    "Baby Steps": (
         "Explanation mode: Baby Steps. Explain in very simple, everyday language, "
         "minimizing technical jargon, step by step, with concrete examples/"
         "analogies. Talk as if to someone who has never coded before."
     ),
-    "Akademik Mod": (
+    "Academic Mode": (
         "Explanation mode: Academic. Explain thoroughly using correct technical "
         "terminology, formal definitions, and technical depth."
     ),
-    "Mülakat Senaryosu": (
+    "Interview Scenario": (
         "Explanation mode: Interview Simulation. (This mode is handled by a "
         "separate flow in app.py; this line only exists so it appears in the "
         "option list.)"
     ),
 }
 
-DEFAULT_EXPLANATION_MODE = "Bebek Adımları"
-INTERVIEW_MODE = "Mülakat Senaryosu"
+DEFAULT_EXPLANATION_MODE = "Baby Steps"
+INTERVIEW_MODE = "Interview Scenario"
 
 
 def build_system_prompt(explanation_mode: str) -> str:

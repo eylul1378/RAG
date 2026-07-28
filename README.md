@@ -5,15 +5,15 @@ Tamamen **çevrimdışı** çalışan, Retrieval-Augmented Generation (RAG) taba
 ## Özellikler
 
 - **3 farklı anlatım modu** (kenar çubuğundan seçilir, her birinin kendi rengi ve kendi bağımsız sohbeti vardır):
-  - 🏆 **Bebek Adımları** — teknik terim kullanmadan, çok basit ve örnekli anlatım
-  - 🎓 **Akademik Mod** — doğru terminoloji ve teknik derinlikle kapsamlı anlatım
-  - ⚔️ **Mülakat Senaryosu** — eğitmen sana bir Java mülakat sorusu sorar, cevabını verirsin, aynı referans materyale göre değerlendirir
+  - 🏆 **Baby Steps** — teknik terim kullanmadan, çok basit ve örnekli anlatım
+  - 🎓 **Academic Mode** — doğru terminoloji ve teknik derinlikle kapsamlı anlatım
+  - ⚔️ **Interview Scenario** — eğitmen sana bir Java mülakat sorusu sorar, cevabını verirsin, aynı referans materyale göre değerlendirir
 - **Mod başına bağımsız sohbet** — bir moddan diğerine geçince ekran temizlenir; önceki modun sorusu/cevabı kaybolmaz, kenar çubuğundaki "Sohbet Geçmişi" listesinden erişilebilir ve tek tek silinebilir durumda kalır
 - **Canlı terminal/kod paneli** — yanıt bir veya daha fazla Java kod bloğu içeriyorsa, en UZUN (en kapsamlı/tam) örnek otomatik olarak sağdaki terminal görünümlü panelde satır numaralarıyla gösterilir
 - **Kaynak gösterme** — her cevabın sonunda hangi belgeden geldiği belirtilir
 - **Uydurmama garantisi** — bilgi tabanında yeterince alakalı içerik bulunamazsa (kosinüs benzerliği 0.50 eşiğinin altındaysa) model hiç çağrılmaz, doğrudan sabit bir *"bulamadım"* yanıtı verilir
 - **~2 dakika içinde eksiksiz yanıt** — CPU üzerinde üretim hızındaki dalgalanmaya karşı, akış (streaming) halinde gerçek zamanlı bir kesme mekanizması + neredeyse boş kalan cevaplar için otomatik tek seferlik yeniden deneme kullanılır
-- **İngilizce cevaplar, Türkçe arayüz** — bilgi kaynakları ve modelin (`phi-3.5-mini`) ana dili İngilizce olduğundan, akıcılık ve doğruluk için cevaplar İngilizce üretilir; arayüz metinleri (butonlar, etiketler) Türkçe kalır
+- **Tamamen İngilizce arayüz ve cevaplar** — bilgi kaynakları ve modelin (`phi-3.5-mini`) ana dili İngilizce olduğundan, akıcılık ve doğruluk için hem cevaplar hem de arayüz metinleri (butonlar, etiketler, mod adları) İngilizce'dir
 - 🎨 Figma tasarımına birebir uyarlanmış, koyu temalı, monospace/terminal esintili 3 panelli Streamlit arayüzü
 
 ## Mimari
@@ -74,7 +74,7 @@ pip install -r requirements.txt
 - `oracle-*.md` — Oracle'ın resmi *Java Tutorials* dokümantasyonundan OOP, kalıtım, kurucu metodlar, koleksiyonlar, multithreading ve daha fazlası üzerine ~33 sayfa
 - `java-interview-questions*.md` — [learning-zone/java-interview-questions](https://github.com/learning-zone/java-interview-questions) reposundan mülakat soru bankaları (genel, koleksiyonlar, multithreading, programlar)
 
-> **Mülakat modu için önemli:** Mülakat sorusu üretiminde kullanılacak dosyaların adında **"interview"** geçmeli (`get_random_chunk` bu şekilde filtreliyor).
+> **Interview Scenario modu için önemli:** Mülakat sorusu üretiminde kullanılacak dosyaların adında **"interview"** geçmeli (`get_random_chunk` bu şekilde filtreliyor).
 
 ### 4. Belgeleri işle (ingestion)
 
@@ -96,7 +96,7 @@ Tarayıcıda `http://localhost:8501` açılır.
 
 Uygulama açıldıktan sonra aşağıdaki adımları takip ederek üç modu da test edebilirsin:
 
-1. **Bebek Adımları / Akademik Mod** — kenar çubuğundan modu seç, sonra sohbet kutusuna örnek bir soru yaz:
+1. **Baby Steps / Academic Mode** — kenar çubuğundan modu seç, sonra sohbet kutusuna örnek bir soru yaz:
    - `How do I create an ArrayList in Java? Give me the code.`
    - `What is the difference between an abstract class and an interface?`
    - `Explain constructors in Java with an example.`
@@ -108,7 +108,7 @@ Uygulama açıldıktan sonra aşağıdaki adımları takip ederek üç modu da t
 
    Beklenen: LLM hiç çağrılmadan anında `"I could not find this information in the documents."` cevabı.
 
-3. **Mülakat Senaryosu** — modu seç, kenar çubuğundaki **"🎯 Yeni Mülakat Sorusu"** butonuna tıkla, eğitmenin sorduğu soruya kendi cümlelerinle cevap yaz.
+3. **Interview Scenario** — modu seç, kenar çubuğundaki **"🎯 New Interview Question"** butonuna tıkla, eğitmenin sorduğu soruya kendi cümlelerinle cevap yaz.
 
    Beklenen: Eğitmen cevabın doğru olmayan/eksik kısımlarını referans materyale göre düzeltir; soru bankasındaki hazır cevabı asla doğrudan göstermez.
 
