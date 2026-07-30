@@ -8,13 +8,12 @@ Tamamen **çevrimdışı** çalışan, Retrieval-Augmented Generation (RAG) taba
   - 🏆 **Baby Steps** — teknik terim kullanmadan, çok basit ve örnekli anlatım
   - 🎓 **Academic Mode** — doğru terminoloji ve teknik derinlikle kapsamlı anlatım
   - ⚔️ **Interview Scenario** — eğitmen sana bir Java mülakat sorusu sorar, cevabını verirsin, aynı referans materyale göre değerlendirir
-- **Mod başına bağımsız sohbet** — bir moddan diğerine geçince ekran temizlenir; önceki modun sorusu/cevabı kaybolmaz, kenar çubuğundaki "Sohbet Geçmişi" listesinden erişilebilir ve tek tek silinebilir durumda kalır
-- **Canlı terminal/kod paneli** — yanıt bir veya daha fazla Java kod bloğu içeriyorsa, en UZUN (en kapsamlı/tam) örnek otomatik olarak sağdaki terminal görünümlü panelde satır numaralarıyla gösterilir
-- **Kaynak gösterme** — her cevabın sonunda hangi belgeden geldiği belirtilir
+- **Mod başına bağımsız sohbet** — bir moddan diğerine geçince ekran temizlenir; önceki modun tüm konuşması kaybolmaz, kenar çubuğundaki "Chat History" listesinde (Claude'un sohbet listesi gibi, mod başına tek satır) kalır — tıklayınca o sohbete geri dönülür, çöp kutusu ikonu o modun tüm konuşmasını siler
+- **Kaynak gösterme** — her cevabın sonunda hangi belgeden geldiği belirtilir (model "Source:" satırından sonra devam edip konuyu tekrarlamaya kalkarsa, cevap deterministik olarak o satırdan hemen sonra kesilir)
 - **Uydurmama garantisi** — bilgi tabanında yeterince alakalı içerik bulunamazsa (kosinüs benzerliği 0.50 eşiğinin altındaysa) model hiç çağrılmaz, doğrudan sabit bir *"bulamadım"* yanıtı verilir
 - **~2 dakika içinde eksiksiz yanıt** — CPU üzerinde üretim hızındaki dalgalanmaya karşı, akış (streaming) halinde gerçek zamanlı bir kesme mekanizması + neredeyse boş kalan cevaplar için otomatik tek seferlik yeniden deneme kullanılır
 - **Tamamen İngilizce arayüz ve cevaplar** — bilgi kaynakları ve modelin (`phi-3.5-mini`) ana dili İngilizce olduğundan, akıcılık ve doğruluk için hem cevaplar hem de arayüz metinleri (butonlar, etiketler, mod adları) İngilizce'dir
-- 🎨 Figma tasarımına birebir uyarlanmış, koyu temalı, monospace/terminal esintili 3 panelli Streamlit arayüzü
+- 🎨 Figma tasarımına dayanan, koyu temalı, monospace/terminal esintili Streamlit arayüzü (sidebar + tam genişlik sohbet paneli — ayrı bir "terminal/kod paneli" denendi ama kodun sohbet balonunda zaten düzgün göründüğü ve tekrarlayan bir hata kaynağı olduğu için kaldırıldı)
 
 ## Mimari
 
@@ -34,7 +33,7 @@ Sorgu akisi (uygulama calisirken, her mesajda):
 +-------------------+      +-------------------+      +-------------------+      +-------------------+
 ```
 
-**Akış:** Belgeler `ingest.py` ile parçalara (chunk) bölünüp Foundry Local'ın embedding modeliyle vektörleştirilir ve SQLite'a kaydedilir → kullanıcı soru sorduğunda aynı embedding modeliyle sorgu vektörleştirilir → `database.py` kosinüs benzerliğiyle en alakalı parçayı bulur (0.50 eşiğinin altındakiler elenir) → bulunan bağlam + soru `foundry_client.py` üzerinden yerel sohbet modeline (`phi-3.5-mini`) gönderilir → cevap akış (streaming) halinde üretilir ve `app.py` hem sohbet balonunda hem de içindeki en uzun kod bloğunu ayıklayıp sağdaki terminal panelinde gösterir.
+**Akış:** Belgeler `ingest.py` ile parçalara (chunk) bölünüp Foundry Local'ın embedding modeliyle vektörleştirilir ve SQLite'a kaydedilir → kullanıcı soru sorduğunda aynı embedding modeliyle sorgu vektörleştirilir → `database.py` kosinüs benzerliğiyle en alakalı parçayı bulur (0.50 eşiğinin altındakiler elenir) → bulunan bağlam + soru `foundry_client.py` üzerinden yerel sohbet modeline (`phi-3.5-mini`) gönderilir → cevap akış (streaming) halinde üretilir, temizlenir (bkz. aşağıda) ve `app.py` tarafından sohbet balonunda gösterilir.
 
 ## Teknoloji Yığını
 
@@ -101,7 +100,7 @@ Uygulama açıldıktan sonra aşağıdaki adımları takip ederek üç modu da t
    - `What is the difference between an abstract class and an interface?`
    - `Explain constructors in Java with an example.`
 
-   Beklenen: ~1-2 dakika içinde İngilizce, kaynak belirtilmiş, kod örnekli bir cevap; kod varsa sağdaki terminal panelinde en kapsamlı örnek otomatik görünür.
+   Beklenen: ~1-2 dakika içinde İngilizce, kaynak belirtilmiş, kod örnekli bir cevap; kod varsa sohbet balonunda syntax highlighted şekilde görünür.
 
 2. **Bağlam dışı soru (uydurmama testi)** — bilgi tabanıyla alakasız bir şey sor, örn:
    - `How do I write a for loop in Python?`
@@ -112,7 +111,7 @@ Uygulama açıldıktan sonra aşağıdaki adımları takip ederek üç modu da t
 
    Beklenen: Eğitmen cevabın doğru olmayan/eksik kısımlarını referans materyale göre düzeltir; soru bankasındaki hazır cevabı asla doğrudan göstermez.
 
-4. **Mod izolasyonu ve sohbet geçmişi** — bir modda soru sorduktan sonra başka bir moda geç; önceki modun ekranının temizlendiğini ama sorunun kenar çubuğundaki "Sohbet Geçmişi"nde (🗑 ile silinebilir halde) durduğunu doğrula.
+4. **Mod izolasyonu ve sohbet geçmişi** — bir modda soru sorduktan sonra başka bir moda geç; önceki modun ekranının temizlendiğini ama "Chat History"de o modun tek bir satır olarak (ilk sorusuyla başlıklandırılmış) durduğunu doğrula. O satıra tıklayınca o moda/sohbete geri dönmeli; ✕ ikonu o modun tüm konuşmasını silmeli.
 
 5. **Bilgi tabanı durumu** — kenar çubuğunun altında `📚 Bilgi tabanı hazır — N belge parçası indekslendi.` yazısının göründüğünü doğrula (N, `ingest.py` sonrası oluşan chunk sayısıdır).
 
@@ -126,7 +125,7 @@ python -c "from database import count_chunks; print(count_chunks())"
 
 ```
 RAG/
-├── app.py               # Streamlit arayüzü (3 panel), mod/sohbet/mülakat akışı
+├── app.py               # Streamlit arayüzü, mod/sohbet/mülakat akışı
 ├── ingest.py             # Belge okuma, parçalama, embedding, SQLite'a kayıt
 ├── database.py            # SQLite CRUD + kosinüs benzerliği ile retrieval
 ├── foundry_client.py       # Foundry Local entegrasyonu (embedding + sohbet, streaming, zaman sınırı)
@@ -141,17 +140,17 @@ RAG/
 
 - **Chunking:** Belgeler paragraf sınırlarına göre ~800 karakterlik pasajlara bölünür (küçük bir karakter örtüşmesiyle bağlam kopmasın diye); tek bir paragraf bu boyutu aşarsa (nadir ama olabiliyor) cümle sınırlarında ayrıca bölünür, aksi halde tek bir aşırı büyük parça üretim süresini ciddi şekilde uzatabiliyordu.
 - **Retrieval:** Sorgu embed edilir, SQLite'taki tüm vektörlerle kosinüs benzerliği hesaplanır (küçük ölçekli koleksiyonlar için brute-force yeterli). **0.50'nin altındaki** benzerlik skorları elenir — bu eşik, açıkça alakasız sorular (~0.23–0.30) ile gerçekten alakalı sorular (~0.55+) arasında kalibre edildi.
-- **Zaman sınırlı üretim:** CPU üzerinde üretim hızı bağlam boyutuna göre büyük ölçüde dalgalanabildiğinden, cevaplar **akış (streaming)** halinde üretilir ve ~100 saniyelik bir üretim süresi dolduğunda son tam cümlede kesilir (retrieval + olası ek gecikmelerle toplam süre ~2 dakikanın altında hedeflenir). Neredeyse boş kalan (şanssız bir prefill/decode dengesizliğine denk gelen) cevaplar kısa bir bekleme sonrası otomatik olarak bir kez daha denenir.
-- **Çıktı temizliği:** Model bazen aynı karakteri onlarca kez tekrarlayan anlamsız bir kuyruk üretebiliyor; bu tür çıktılar tespit edilip kırpılıyor. Süre sınırı yüzünden yarıda kesilen cevaplar da mümkün olduğunca son tam cümlede kesiliyor.
-- **Uydurmama:** Hem sistem promptunda hem de retrieval aşamasında (benzerlik eşiği) çift katmanlı bir koruma var. Küçük modellerin "sadece bağlamı kullan" talimatını bazen görmezden gelip kendi genel bilgisinden cevap uydurabildiği gözlemlendiği için, bağlam bulunamadığında LLM hiç çağrılmaz — yanıt doğrudan Python tarafında üretilir.
-- **Terminal paneli:** Cevaptaki tüm ```` ```java ```` kod blokları ayıklanır ve en uzun olanı gösterilir; bu, adım adım küçük kod parçacıklarıyla (örn. tek satırlık bir import) birlikte sonda tam bir örnek veren cevaplarda, panelde kırpık değil kapsamlı örneğin görünmesini sağlar.
+- **Zaman sınırlı üretim:** CPU üzerinde üretim hızı bağlam boyutuna göre büyük ölçüde dalgalanabildiğinden, cevaplar **akış (streaming)** halinde üretilir ve ~100 saniyelik bir üretim süresi dolduğunda son tam cümlede kesilir (retrieval + olası ek gecikmelerle toplam süre ~2 dakikanın altında hedeflenir). Aynı şekilde, model `max_tokens` sınırına (`finish_reason="length"`) çarptığında da bu bir "yarıda kesilme" sayılır ve son tam cümlede kesilir — sadece kendi zaman sınırımız değil, herhangi bir eksik-bitiş durumu bu temizlikten geçer.
+- **Çıktı temizliği:** Model bazen aynı karakteri onlarca kez tekrarlayan anlamsız bir kuyruk üretebiliyor; bu tür çıktılar tespit edilip kırpılıyor. Ayrıca kod bloklarının ortasında bazen tek başına bir satırda anlamsız bir rakam/harf üretebiliyor (örn. bir `println` satırından hemen sonra tek başına `0`) — gerçek Java kodunda böyle bir satır neredeyse hiç geçerli olmadığından bu satırlar deterministik olarak siliniyor. Neredeyse boş kalan cevaplar kısa bir bekleme sonrası otomatik olarak bir kez daha denenir.
+- **Kaynak satırının konumu:** Model bazen "Source: dosya.md" yazdıktan SONRA konuşmaya devam edip aynı açıklamayı (bazen ikinci bir kod örneğiyle) tekrarlıyordu. Cevap artık ilk "Source:" satırından hemen sonra kesiliyor; eğer bu kesim kapanmamış bir kod bloğu (```` ``` ````) bırakıyorsa, önce blok kapatılıyor ki sohbet balonunda düzgün render olsun.
+- **Uydurmama:** Hem sistem promptunda hem de retrieval aşamasında (benzerlik eşiği) çift katmanlı bir koruma var. Küçük modellerin "sadece bağlamı kullan" talimatını bazen görmezden gelip kendi genel bilgisinden cevap uydurabildiği gözlemlendiği için, bağlam bulunamadığında LLM hiç çağrılmaz — yanıt doğrudan Python tarafında üretilir. Ayrıca soruda başka bir programlama dili adı (Python, C++, JavaScript vb.) geçiyorsa da LLM'e hiç gidilmeden aynı ret cevabı verilir -- ortak kavramlar ("for loop" gibi) farklı bir dilde sorulsa bile embedding benzerliği eşiği geçebiliyor ve bu deterministik kontrol olmadan model kendi bilgisinden o dilde cevap uydurabiliyordu.
 
 ## Bilinen Sınırlamalar
 
-- **Küçük model, kusursuz değil:** `phi-3.5-mini` küçük ve CPU'da çalışan bir modeldir; İngilizce yanıtlarda genel akıcılık/doğruluk iyi olsa da, nadiren kod bloğu içinde tek bir yabancı karakter gibi kozmetik ufak hatalar görülebiliyor.
+- **Küçük model, kusursuz değil:** `phi-3.5-mini` küçük ve CPU'da çalışan bir modeldir; İngilizce yanıtlarda genel akıcılık/doğruluk iyi olsa da, nadiren üretilen kod örneğinde bir parantez/süslü parantez eksik kalabiliyor (tek karakterlik anlamsız satırlar deterministik olarak temizleniyor, ama eksik bir `}` gibi yapısal bir hata Java sözdizimi doğrulaması olmadan tespit edilemiyor).
 - **CPU'da çalışıyor:** Bu makinede GPU (CUDA) hızlandırma denendi ancak execution provider kaydı başarısız olduğundan devre dışı; tüm çıkarım CPU üzerinde yapılıyor, bu yüzden yanıt süreleri donanıma bağlı olarak değişebilir.
 - **Mülakat modu:** Kaynak soru bankası "soru + cevap" çiftleri içerdiğinden, model bazen cevabı da sızdırmaya çalışabiliyor; bunu engellemek için hem prompt hem de çıktıyı temizleyen bir güvenlik filtresi var, ama %100 kusursuz olmayabilir.
-- **Kod bloğu talimatına uyum:** Kod istenen her soruda modelin cevabı mutlaka ```` ```java ```` bloğu içinde vermesi promptla istenir ama küçük bir modelde bu %100 garanti edilemez; nadiren düz metin içinde kalan kod, terminal panelinde görünmeyebilir.
+- **Birleşik/çok parçalı sorular:** İki ayrı konuyu tek soruda birleştiren istekler (örn. "hem overloading hem overriding'i açıkla") modelin `max_tokens` sınırına daha kolay çarpmasına yol açabiliyor; cevap yine de son tam cümlede düzgün kesiliyor ama "Source:" satırına hiç ulaşamayabiliyor.
 
 ## Veri Kaynakları ve Lisanslama
 
