@@ -108,6 +108,17 @@ if "interview_chunk" not in st.session_state:
     st.session_state.interview_chunk = None
 if "explanation_mode" not in st.session_state:
     st.session_state.explanation_mode = DEFAULT_EXPLANATION_MODE
+# Streamlit, script çalışırken YENİ bir widget etkileşimi (örn. bir mod
+# butonuna tıklama) geldiğinde çalışan script'i YARIDA KESİP yeni etkileşimle
+# baştan başlatıyor. generate_answer() içindeyken bu olursa, soru zaten
+# current_messages'a eklenmiş ama cevap hiç eklenmemiş oluyor -- Chat
+# History'de cevapsız bir kayıt kalıyor. `generating` bayrağı, üretim
+# başlamadan ÖNCEKİ bir rerun'da True'ya çekilip sidebar'ı devre dışı
+# bırakıyor, böylece üretim sırasında mod/geçmiş butonlarına tıklanamıyor.
+if "generating" not in st.session_state:
+    st.session_state.generating = False
+if "interview_question_pending" not in st.session_state:
+    st.session_state.interview_question_pending = False
 
 
 def _start_new_thread(mode_name: str) -> None:
@@ -302,6 +313,7 @@ with st.sidebar:
             key=f"mode_{mode_name}",
             use_container_width=True,
             type="primary" if is_active else "secondary",
+            disabled=st.session_state.generating,
         ):
             # Mod butonuna her tıklama TEMİZ bir sohbet başlatır -- önceki
             # sohbet Chat History'de kalır, ekrandan sadece kalkar.
@@ -311,29 +323,17 @@ with st.sidebar:
 
     if active_mode == INTERVIEW_MODE:
         st.divider()
-        if st.button("🎯 New Interview Question", use_container_width=True):
-            # Öncelikle dosya adında "interview" geçen bir kaynaktan seç
-            # (GitHub mülakat soru bankası); yoksa herhangi bir chunk'tan seç.
-            chunk = get_random_chunk(source_contains="interview")
-            if chunk is None:
-                st.warning("There are no documents in the knowledge base yet to generate an interview question.")
-            else:
-                with st.spinner("Preparing question..."):
-                    try:
-                        reference_context = [f"[Source: {chunk['source']}]\n{chunk['content']}"]
-                        posed_question = generate_answer(
-                            INTERVIEW_QUESTION_PROMPT,
-                            reference_context,
-                            "Based on this material, ask me a single interview question.",
-                        )
-                        posed_question = _strip_leaked_answer(posed_question)
-                    except Exception as exc:
-                        posed_question = f"An error occurred: {exc}"
-                        chunk = None
-
-                st.session_state.interview_chunk = chunk
-                current_messages.append({"role": "assistant", "content": posed_question})
-                st.rerun()
+        if st.button(
+            "🎯 New Interview Question",
+            use_container_width=True,
+            disabled=st.session_state.generating,
+        ):
+            # Soruyu burada üretmek yerine (bkz. yukarıdaki `generating`
+            # notu) bir bayrak set edip rerun ediyoruz -- asıl üretim, sidebar
+            # devre dışı render edildikten SONRA, aşağıdaki bloklarda olur.
+            st.session_state.interview_question_pending = True
+            st.session_state.generating = True
+            st.rerun()
 
     st.markdown('<div class="section-label">Chat History</div>', unsafe_allow_html=True)
 
@@ -360,11 +360,12 @@ with st.sidebar:
                     key=f"hist_{mode_name}_{t_idx}",
                     use_container_width=True,
                     type="primary" if is_open else "secondary",
+                    disabled=st.session_state.generating,
                 ):
                     st.session_state.explanation_mode = mode_name
                     st.session_state.active_thread[mode_name] = t_idx
                     st.rerun()
-            if col_delete.button("✕", key=f"del_{mode_name}_{t_idx}"):
+            if col_delete.button("✕", key=f"del_{mode_name}_{t_idx}", disabled=st.session_state.generating):
                 del threads[t_idx]
                 if not threads:
                     threads.append([])
@@ -391,9 +392,10 @@ with st.sidebar:
 # (Streamlit'in kendi davranışı), bu yüzden burada erken çağırıp `question`
 # değerini önceden biliyoruz -- böylece karşılama kartı, bu çalışmada bir
 # soru gönderildiyse (current_messages henüz güncellenmemiş olsa bile)
-# hemen gizlenir, bir sonraki rerun'u beklemez.
+# hemen gizlenir, bir sonraki rerun'u beklemez. Üretim sırasında da (bkz.
+# yukarıdaki `generating` notu) devre dışı bırakılıyor.
 placeholder = "Type your answer to the interview question..." if active_mode == INTERVIEW_MODE else "Ask something about Java..."
-question = st.chat_input(placeholder)
+question = st.chat_input(placeholder, disabled=st.session_state.generating)
 
 if not current_messages and not question:
     st.markdown(
@@ -411,9 +413,46 @@ for message in current_messages:
         st.markdown(message["content"])
 
 if question:
+    # Soruyu ekleyip HEMEN rerun ediyoruz -- asıl üretim çağrısı burada
+    # DEĞİL, aşağıdaki `pending` bloğunda (bir SONRAKİ çalışmada) yapılıyor.
+    # Böylece sidebar, üretim başlamadan önce devre dışı render edilmiş
+    # oluyor ve kullanıcı üretim sırasında moda tıklayıp script'i kesip
+    # soruyu cevapsız bırakamıyor (bu, bildirilen hatanın kök nedeniydi).
     current_messages.append({"role": "user", "content": question})
-    with st.chat_message("user"):
-        st.markdown(question)
+    st.session_state.generating = True
+    st.rerun()
+
+if st.session_state.interview_question_pending:
+    with st.chat_message("assistant"):
+        chunk = get_random_chunk(source_contains="interview")
+        if chunk is None:
+            posed_question = "There are no documents in the knowledge base yet to generate an interview question."
+            st.markdown(posed_question)
+        else:
+            with st.spinner("Preparing question..."):
+                try:
+                    reference_context = [f"[Source: {chunk['source']}]\n{chunk['content']}"]
+                    posed_question = generate_answer(
+                        INTERVIEW_QUESTION_PROMPT,
+                        reference_context,
+                        "Based on this material, ask me a single interview question.",
+                    )
+                    posed_question = _strip_leaked_answer(posed_question)
+                except Exception as exc:
+                    posed_question = f"An error occurred: {exc}"
+                    chunk = None
+            st.markdown(posed_question)
+
+    st.session_state.interview_chunk = chunk
+    current_messages.append({"role": "assistant", "content": posed_question})
+    st.session_state.interview_question_pending = False
+    st.session_state.generating = False
+    st.rerun()
+
+pending = bool(current_messages) and current_messages[-1]["role"] == "user"
+
+if pending:
+    pending_question = current_messages[-1]["content"]
 
     with st.chat_message("assistant"):
         top_chunks = []
@@ -440,7 +479,7 @@ if question:
                         answer = generate_answer(
                             INTERVIEW_EVALUATION_PROMPT,
                             reference_context,
-                            f"Candidate's answer: {question}",
+                            f"Candidate's answer: {pending_question}",
                         )
                     except Exception as exc:
                         answer = f"An error occurred: {exc}"
@@ -449,12 +488,12 @@ if question:
                 st.session_state.interview_chunk = None
                 st.caption("Click '🎯 New Interview Question' in the sidebar for a new question.")
 
-        elif _OTHER_LANGUAGE_PATTERN.search(question):
+        elif _OTHER_LANGUAGE_PATTERN.search(pending_question):
             answer = "I could not find this information in the documents."
             st.markdown(answer)
 
         else:
-            top_chunks = get_top_chunks(question)
+            top_chunks = get_top_chunks(pending_question)
 
             if not top_chunks:
                 # Küçük modeller "bağlam yok, uydurma" talimatına rağmen kendi
@@ -470,7 +509,7 @@ if question:
                             f"[Source: {chunk['source']}]\n{chunk['content']}" for chunk in top_chunks
                         ]
                         system_prompt = build_system_prompt(active_mode)
-                        answer = generate_answer(system_prompt, context_texts, question)
+                        answer = generate_answer(system_prompt, context_texts, pending_question)
                     except Exception as exc:
                         answer = f"An error occurred: {exc}"
 
@@ -484,8 +523,9 @@ if question:
                         st.divider()
 
     current_messages.append({"role": "assistant", "content": answer})
+    st.session_state.generating = False
 
-    # Kenar çubuğundaki "Sohbet Geçmişi" listesi bu script çalışmasının
+    # Kenar çubuğundaki "Chat History" listesi bu script çalışmasının
     # BAŞINDA (mesaj eklenmeden önce) render edildiği için, güncel halin
     # görünmesi amacıyla sayfayı yeniden çalıştırıyoruz.
     st.rerun()
