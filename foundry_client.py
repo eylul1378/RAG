@@ -124,8 +124,12 @@ def generate_answer(system_prompt: str, context_chunks: list[str], question: str
 
     chat_client = model.get_chat_client()
     # max_tokens bir üst güvenlik sınırı (aşırı uzun/sonsuz üretime karşı);
-    # asıl süre garantisi aşağıdaki gerçek zamanlı (wall-clock) kesmeden gelir.
-    chat_client.settings.max_tokens = 600
+    # asıl süre garantisi aşağıdaki gerçek zamanlı (wall-clock) kesmeden gelir
+    # (bu yüzden bu sınırı yükseltmek toplam süreyi ~100 sn'nin üstüne çıkarmaz).
+    # 600'den 900'e çıkarıldı: özellikle Academic Mode'un daha detaylı
+    # cevaplarında model "Source: <dosya>" satırına ulaşamadan bu sınıra
+    # çarpıp cevabı kaynaksız bırakabiliyordu (gözlemlenen bir örnekte).
+    chat_client.settings.max_tokens = 900
 
     messages = [
         {"role": "system", "content": system_prompt},
