@@ -79,6 +79,20 @@ def _strip_leaked_answer(text: str) -> str:
     return text.strip()
 
 
+# Bilgi tabanı sadece Java kaynaklarından oluşuyor, ama ortak kavramlar (örn.
+# "for loop") başka bir dilde sorulsa bile embedding benzerliği eşiğin (0.50)
+# üstüne çıkabiliyor -- gözlemlenen bir örnekte "How do I write a for loop in
+# Python?" sorusu Think Java'daki for-loop bölümüyle 0.57 benzerlik almış ve
+# model, context Java hakkında olduğu halde kendi bilgisinden Python cevabı
+# üretmiş (ret talimatını göz ardı ederek). Bu yüzden retrieval/modele
+# güvenmek yerine, soruda başka bir programlama dili adı geçiyorsa LLM'i hiç
+# çağırmadan deterministik olarak reddediyoruz.
+_OTHER_LANGUAGE_PATTERN = re.compile(
+    r"\b(python|c\+\+|c#|javascript|typescript|ruby|php|golang|rust|swift|kotlin|perl|scala|matlab)(?!\w)",
+    re.IGNORECASE,
+)
+
+
 # Sağ paneldeki "terminal" kutusu için: yanıt bir Java kod bloğu içeriyorsa
 # onu ayıklayıp orada gösteriyoruz (kullanıcının istediği davranış budur --
 # terminal paneli sadece dekoratif değil, kodun gittiği yer).
@@ -366,6 +380,10 @@ with chat_col:
                     st.markdown(answer)
                     st.session_state.interview_chunk = None
                     st.caption("Click '🎯 New Interview Question' in the sidebar for a new question.")
+
+            elif _OTHER_LANGUAGE_PATTERN.search(question):
+                answer = "I could not find this information in the documents."
+                st.markdown(answer)
 
             else:
                 top_chunks = get_top_chunks(question)
