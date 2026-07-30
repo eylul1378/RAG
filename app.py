@@ -400,7 +400,7 @@ if not current_messages and not question:
         '<div class="empty-state">'
         '<div class="emoji">🤖</div>'
         '<div class="title">Hi, I\'m JavaBot</div>'
-        '<div class="subtitle">Ask me anything about Java — OOP, inheritance, collections, '
+        '<div class="subtitle">Ask me anything about Java — OOP, inheritance, collections '
         "and memory management.</div>"
         "</div>",
         unsafe_allow_html=True,
