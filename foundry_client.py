@@ -243,12 +243,23 @@ def _cut_after_source_line(text: str) -> tuple[str, bool]:
 
     before = text[: match.start()]
     source_line = text[match.start() : match.end()]
-    # Model bazen "Source:" satırını bir kod bloğunu (```) kapatmadan hemen
-    # önce yazıyor -- bu durumda burada kestiğimizde blok kapanmamış kalır ve
-    # Streamlit'in markdown render'ı bozulur. Kapanmamış (tek sayıda ```)
-    # bir blok varsa Source satırından önce kapatıyoruz.
+    # Model bazen "Source:" satırını bir kod bloğunu (```) kapatmadan, hatta
+    # Java kodunun kendi süslü parantezlerini (if/method/class) bile
+    # tamamlamadan yazıyor -- gözlemlenen bir örnekte HashMap kod bloğu
+    # "if (...) { ... " ile kesilip hemen "Source:" geliyordu, üç kapanış
+    # parantezi (if/main/class) hiç yazılmamıştı. Burada kestiğimizde bu
+    # eksik kalırsa hem markdown render'ı bozulur hem de kod kopyalanırsa
+    # derlenmez. Kapanmamış (tek sayıda ```) bir blok varsa: önce o bloğun
+    # içindeki { / } sayısını dengeleyip eksik kapanış parantezlerini ekliyor,
+    # sonra fence'i kapatıyoruz.
     if before.count("```") % 2 == 1:
-        before = before.rstrip() + "\n```\n\n"
+        fence_start = before.rfind("```")
+        code_part = before[fence_start:]
+        missing_braces = code_part.count("{") - code_part.count("}")
+        before = before.rstrip()
+        if missing_braces > 0:
+            before += "\n" + "\n".join("}" * 1 for _ in range(missing_braces))
+        before += "\n```\n\n"
     return before + source_line, True
 
 
