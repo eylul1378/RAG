@@ -210,11 +210,21 @@ st.markdown(
     [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {{
         border-left-color: var(--active-color);
     }}
+    /* Streamlit'in varsayılan avatar renkleri (kullanıcı için parlak kırmızı,
+       asistan için turuncu) tema ile uyumsuzdu ve vurgu rengiyle üst üste
+       binince (örn. kırmızı zemin + yeşil ikon) göz yoruyordu -- ikisini de
+       temanın sakin tonlarıyla değiştiriyoruz. */
+    [data-testid="stChatMessageAvatarUser"] {{
+        background-color: var(--active-color) !important;
+    }}
     [data-testid="stChatMessageAvatarUser"] span[data-testid="stIconMaterial"] {{
-        color: var(--active-color);
+        color: var(--bg-main) !important;
+    }}
+    [data-testid="stChatMessageAvatarAssistant"] {{
+        background-color: var(--border-subtle) !important;
     }}
     [data-testid="stChatMessageAvatarAssistant"] span[data-testid="stIconMaterial"] {{
-        color: var(--text-dim);
+        color: #CBD5E1 !important;
     }}
     .empty-state {{
         text-align: center;
@@ -377,13 +387,21 @@ with st.sidebar:
         st.caption("📚 Knowledge base not ready yet.")
 
 # --- Ana alan: tam genişlik sohbet paneli ---
-if not current_messages:
+# st.chat_input() nerede çağrılırsa çağrılsın ekranın en altına sabitlenir
+# (Streamlit'in kendi davranışı), bu yüzden burada erken çağırıp `question`
+# değerini önceden biliyoruz -- böylece karşılama kartı, bu çalışmada bir
+# soru gönderildiyse (current_messages henüz güncellenmemiş olsa bile)
+# hemen gizlenir, bir sonraki rerun'u beklemez.
+placeholder = "Type your answer to the interview question..." if active_mode == INTERVIEW_MODE else "Ask something about Java..."
+question = st.chat_input(placeholder)
+
+if not current_messages and not question:
     st.markdown(
         '<div class="empty-state">'
         '<div class="emoji">🤖</div>'
         '<div class="title">Hi, I\'m JavaBot</div>'
         '<div class="subtitle">Ask me anything about Java — OOP, inheritance, collections, '
-        "memory management, and more.</div>"
+        "and memory management.</div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -391,9 +409,6 @@ if not current_messages:
 for message in current_messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-
-placeholder = "Type your answer to the interview question..." if active_mode == INTERVIEW_MODE else "Ask something about Java..."
-question = st.chat_input(placeholder)
 
 if question:
     current_messages.append({"role": "user", "content": question})
