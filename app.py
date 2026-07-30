@@ -14,7 +14,10 @@ paneli kaldırıldı -- kod zaten sohbet balonu içinde düzgün, syntax
 highlighted şekilde görünüyordu; ayrı bir kopya panel yalnızca yanlış kod
 bloğu seçimi/kapanmamış fence gibi ek hata kaynağı yaratıyordu):
 - Sol: mod seçimi (her modun kendi vurgu rengi vardır) ve tıklanabilir/
-  silinebilir sohbet geçmişi (Claude'daki gibi, mod başına tek sohbet).
+  silinebilir sohbet geçmişi (Claude'daki gibi: her mod BİRDEN FAZLA ayrı
+  sohbet/thread tutabilir -- bir mod butonuna her tıklama o modda TEMİZ,
+  yeni bir sohbet başlatır, önceki sohbet kaybolmaz, Chat History'de kendi
+  satırı olarak durur ve tıklanınca geri yüklenir).
 - Sağ: sohbet akışı ve soru giriş kutusu.
 
 Üç anlatım modu vardır:
@@ -91,20 +94,41 @@ st.set_page_config(page_title="JavaBot", page_icon="🤖", layout="wide")
 init_db()
 
 # --- Oturum durumu ---
-# Her mod kendi bağımsız sohbetini tutar (conversations[mod_adı]) ki bir
-# moddan diğerine geçince önceki modun konuşması ekranda kalmasın -- yeni
-# seçilen mod temiz bir ekranla (veya daha önce o modda bırakılan yerden)
-# başlasın, eski konuşma sadece "Sohbet Geçmişi" listesinden erişilebilsin.
+# Claude'daki sohbet listesi mantığı: her mod, kendi içinde BİRDEN FAZLA ayrı
+# sohbet (thread) tutabilir -- conversations[mod] bir mesaj listesi değil,
+# mesaj listelERİ listesidir. active_thread[mod], o modda şu an hangi
+# thread'in görüntülendiğini tutar. Bir mod butonuna tıklamak her zaman yeni
+# (boş) bir thread açar -- önceki thread kaybolmaz, Chat History'de kendi
+# satırı olarak kalır ve oradan tıklanınca geri yüklenir.
 if "conversations" not in st.session_state:
-    st.session_state.conversations = {mode: [] for mode in EXPLANATION_MODES}
+    st.session_state.conversations = {mode: [[]] for mode in EXPLANATION_MODES}
+if "active_thread" not in st.session_state:
+    st.session_state.active_thread = {mode: 0 for mode in EXPLANATION_MODES}
 if "interview_chunk" not in st.session_state:
     st.session_state.interview_chunk = None
 if "explanation_mode" not in st.session_state:
     st.session_state.explanation_mode = DEFAULT_EXPLANATION_MODE
 
+
+def _start_new_thread(mode_name: str) -> None:
+    """Verilen mod için yeni, boş bir sohbet başlatır (Claude'daki "New Chat"
+    gibi) -- önceki thread'ler dokunulmadan kalır. Zaten boş bir thread
+    açıksa (kullanıcı hiç yazmadan tekrar tıkladıysa) gereksiz yere yeni
+    bir boş thread daha eklemiyoruz."""
+    threads = st.session_state.conversations[mode_name]
+    if threads[-1]:
+        threads.append([])
+    st.session_state.active_thread[mode_name] = len(threads) - 1
+
+
 active_mode = st.session_state.explanation_mode
 active_color = MODE_COLORS[active_mode]
-current_messages = st.session_state.conversations[active_mode]
+active_threads = st.session_state.conversations[active_mode]
+active_thread_idx = st.session_state.active_thread[active_mode]
+if active_thread_idx >= len(active_threads):
+    active_thread_idx = len(active_threads) - 1
+    st.session_state.active_thread[active_mode] = active_thread_idx
+current_messages = active_threads[active_thread_idx]
 
 # --- Koyu, terminal/kod-editörü esintili tema (Figma tasarımına göre) ---
 st.markdown(
@@ -168,6 +192,40 @@ st.markdown(
         letter-spacing: 0.15em;
         margin-bottom: 0.4rem;
     }}
+    /* Terminal panelinin kaldırılmasıyla sohbet alanı tüm genişliği kaplıyordu
+       ve boş/geniş görünüyordu -- içeriği okunabilir bir genişlikte ortalıyoruz
+       (ChatGPT/Claude'daki gibi), tıpkı bir sohbet sütunu hissi versin diye. */
+    [data-testid="stMainBlockContainer"] {{
+        max-width: 860px;
+        margin: 0 auto;
+        padding-top: 2.5rem;
+    }}
+    [data-testid="stChatMessage"] {{
+        background-color: var(--bg-panel);
+        border: 1px solid var(--border-subtle);
+        border-radius: 14px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+    }}
+    .empty-state {{
+        text-align: center;
+        margin-top: 3.5rem;
+        padding: 2rem;
+        border: 1px dashed var(--border-subtle);
+        border-radius: 16px;
+    }}
+    .empty-state .emoji {{ font-size: 2.2rem; }}
+    .empty-state .title {{
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #F1F5F9;
+        margin-top: 0.6rem;
+    }}
+    .empty-state .subtitle {{
+        color: var(--text-dim);
+        margin-top: 0.5rem;
+        font-size: 0.9rem;
+    }}
     [data-testid="stChatInput"], .stChatInput {{
         background-color: var(--bg-panel);
         border: 1px solid var(--border-subtle) !important;
@@ -199,6 +257,9 @@ with st.sidebar:
             use_container_width=True,
             type="primary" if is_active else "secondary",
         ):
+            # Mod butonuna her tıklama TEMİZ bir sohbet başlatır -- önceki
+            # sohbet Chat History'de kalır, ekrandan sadece kalkar.
+            _start_new_thread(mode_name)
             st.session_state.explanation_mode = mode_name
             st.rerun()
 
@@ -225,42 +286,49 @@ with st.sidebar:
                         chunk = None
 
                 st.session_state.interview_chunk = chunk
-                st.session_state.conversations[INTERVIEW_MODE].append(
-                    {"role": "assistant", "content": posed_question}
-                )
+                current_messages.append({"role": "assistant", "content": posed_question})
                 st.rerun()
 
     st.markdown('<div class="section-label">Chat History</div>', unsafe_allow_html=True)
 
-    # Claude'daki gibi: her mod TEK bir sohbet olarak listelenir (o modda
-    # sorulan ilk soru, sohbetin başlığı gibi kullanılır), her sorudan ayrı
-    # bir kayıt OLUŞTURULMAZ -- aynı moddaki tüm sorular zaten tek bir sohbete
-    # ait. Bir sohbete tıklamak o moda geçer (tıpkı Claude'da bir sohbete
-    # tıklayınca o sohbetin açılması gibi); çöp kutusu tüm sohbeti siler.
+    # Claude'daki sohbet listesi gibi: her mod BİRDEN FAZLA sohbet/thread
+    # içerebilir, her biri kendi satırı olarak listelenir (o thread'deki ilk
+    # soru başlık olarak kullanılır). Bir satıra tıklamak o moda VE o
+    # thread'e geçer (tıpkı Claude'da bir sohbete tıklayınca onun açılması
+    # gibi); çöp kutusu sadece o thread'i siler.
     any_history = False
     for mode_name, icon in MODE_ICONS.items():
-        conv = st.session_state.conversations[mode_name]
-        first_question = next((m["content"] for m in conv if m["role"] == "user"), None)
-        if first_question is None:
-            continue
+        threads = st.session_state.conversations[mode_name]
+        for t_idx, thread in enumerate(threads):
+            first_question = next((m["content"] for m in thread if m["role"] == "user"), None)
+            if first_question is None:
+                continue
 
-        any_history = True
-        label = (first_question[:24] + "…") if len(first_question) > 24 else first_question
-        col_label, col_delete = st.columns([5, 1])
-        with col_label:
-            if st.button(
-                f"{icon} {label}",
-                key=f"hist_{mode_name}",
-                use_container_width=True,
-                type="primary" if mode_name == active_mode else "secondary",
-            ):
-                st.session_state.explanation_mode = mode_name
+            any_history = True
+            is_open = mode_name == active_mode and t_idx == active_thread_idx
+            label = (first_question[:24] + "…") if len(first_question) > 24 else first_question
+            col_label, col_delete = st.columns([5, 1])
+            with col_label:
+                if st.button(
+                    f"{icon} {label}",
+                    key=f"hist_{mode_name}_{t_idx}",
+                    use_container_width=True,
+                    type="primary" if is_open else "secondary",
+                ):
+                    st.session_state.explanation_mode = mode_name
+                    st.session_state.active_thread[mode_name] = t_idx
+                    st.rerun()
+            if col_delete.button("✕", key=f"del_{mode_name}_{t_idx}"):
+                del threads[t_idx]
+                if not threads:
+                    threads.append([])
+                if mode_name == active_mode:
+                    st.session_state.active_thread[mode_name] = min(
+                        active_thread_idx, len(threads) - 1
+                    )
+                    if is_open:
+                        st.session_state.interview_chunk = None
                 st.rerun()
-        if col_delete.button("✕", key=f"del_{mode_name}"):
-            st.session_state.conversations[mode_name] = []
-            if mode_name == INTERVIEW_MODE:
-                st.session_state.interview_chunk = None
-            st.rerun()
 
     if not any_history:
         st.caption("No conversations yet.")
@@ -276,7 +344,15 @@ with st.sidebar:
 st.markdown(f'<div class="javabot-label">— JAVABOT</div>', unsafe_allow_html=True)
 
 if not current_messages:
-    st.markdown("Hi. I'm here to help you with Java.")
+    st.markdown(
+        '<div class="empty-state">'
+        '<div class="emoji">🤖</div>'
+        '<div class="title">Hi, I\'m JavaBot</div>'
+        '<div class="subtitle">Ask me anything about Java — OOP, inheritance, collections, '
+        "memory management, and more.</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
 for message in current_messages:
     with st.chat_message(message["role"]):
