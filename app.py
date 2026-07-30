@@ -186,33 +186,43 @@ st.markdown(
         font-size: 1.3rem;
         font-weight: 700;
     }}
-    .javabot-label {{
-        color: var(--active-color);
-        font-size: 0.75rem;
-        letter-spacing: 0.15em;
-        margin-bottom: 0.4rem;
-    }}
     /* Terminal panelinin kaldırılmasıyla sohbet alanı tüm genişliği kaplıyordu
        ve boş/geniş görünüyordu -- içeriği okunabilir bir genişlikte ortalıyoruz
        (ChatGPT/Claude'daki gibi), tıpkı bir sohbet sütunu hissi versin diye. */
     [data-testid="stMainBlockContainer"] {{
         max-width: 860px;
         margin: 0 auto;
-        padding-top: 2.5rem;
+        padding-top: 3rem;
     }}
     [data-testid="stChatMessage"] {{
         background-color: var(--bg-panel);
         border: 1px solid var(--border-subtle);
-        border-radius: 14px;
+        border-left: 3px solid var(--border-subtle);
+        border-radius: 12px;
         padding: 1rem 1.25rem;
         margin-bottom: 1rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+        transition: border-color 0.15s ease;
+    }}
+    /* Kullanıcı ve asistan balonlarını vurgu rengiyle ayırt et (Streamlit
+       her mesajı, içindeki avatar test-id'sine göre farklı role render
+       ediyor; :has() ile bunu dıştaki balon kartına yansıtıyoruz). */
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {{
+        border-left-color: var(--active-color);
+    }}
+    [data-testid="stChatMessageAvatarUser"] span[data-testid="stIconMaterial"] {{
+        color: var(--active-color);
+    }}
+    [data-testid="stChatMessageAvatarAssistant"] span[data-testid="stIconMaterial"] {{
+        color: var(--text-dim);
     }}
     .empty-state {{
         text-align: center;
-        margin-top: 3.5rem;
-        padding: 2rem;
+        margin-top: 3rem;
+        padding: 2.5rem 2rem;
         border: 1px dashed var(--border-subtle);
         border-radius: 16px;
+        background: color-mix(in srgb, var(--active-color) 4%, var(--bg-panel));
     }}
     .empty-state .emoji {{ font-size: 2.2rem; }}
     .empty-state .title {{
@@ -229,7 +239,26 @@ st.markdown(
     [data-testid="stChatInput"], .stChatInput {{
         background-color: var(--bg-panel);
         border: 1px solid var(--border-subtle) !important;
-        border-radius: 8px;
+        border-radius: 12px;
+        transition: border-color 0.15s ease;
+    }}
+    [data-testid="stChatInput"]:focus-within {{
+        border-color: var(--active-color) !important;
+    }}
+    [data-testid="stChatInputSubmitButton"] {{
+        background-color: var(--active-color) !important;
+        transition: opacity 0.15s ease;
+    }}
+    [data-testid="stChatInputSubmitButton"]:hover {{
+        opacity: 0.85;
+    }}
+    [data-testid="stSidebar"] .stButton > button {{
+        transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+    }}
+    [data-testid="stExpander"] {{
+        background-color: var(--bg-panel);
+        border: 1px solid var(--border-subtle);
+        border-radius: 10px;
     }}
     .history-item {{
         display: flex;
@@ -239,6 +268,13 @@ st.markdown(
         font-size: 0.85rem;
         padding: 0.3rem 0;
     }}
+    ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
+    ::-webkit-scrollbar-track {{ background: var(--bg-main); }}
+    ::-webkit-scrollbar-thumb {{
+        background: var(--border-subtle);
+        border-radius: 6px;
+    }}
+    ::-webkit-scrollbar-thumb:hover {{ background: var(--active-color); }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -341,8 +377,6 @@ with st.sidebar:
         st.caption("📚 Knowledge base not ready yet.")
 
 # --- Ana alan: tam genişlik sohbet paneli ---
-st.markdown(f'<div class="javabot-label">— JAVABOT</div>', unsafe_allow_html=True)
-
 if not current_messages:
     st.markdown(
         '<div class="empty-state">'
