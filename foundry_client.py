@@ -168,8 +168,16 @@ def _stream_with_time_limit(chat_client, messages: list[dict]) -> str:
             delta = chunk.choices[0].delta.content
             if delta:
                 collected.append(delta)
-            if chunk.choices[0].finish_reason is not None:
-                truncated = False
+            finish_reason = chunk.choices[0].finish_reason
+            if finish_reason is not None:
+                # "stop" == model kendi isteğiyle doğal olarak bitirdi (tam
+                # cevap). "length" (max_tokens sınırına çarpma) ya da başka
+                # herhangi bir sebep de bizim zaman sınırımız gibi bir YARIDA
+                # KESME'dir -- önceden yalnızca "stop" olmayanı 'tamamlandı'
+                # sayıyorduk, bu yüzden max_tokens'a çarpan uzun cevaplar
+                # (örn. hem overloading hem overriding isteyen birleşik bir
+                # soru) cümle ortasında kesilip hiç temizlenmeden gösteriliyordu.
+                truncated = finish_reason != "stop"
                 break
         if time.monotonic() - start > _MAX_GENERATION_SECONDS:
             break
@@ -180,7 +188,9 @@ def _stream_with_time_limit(chat_client, messages: list[dict]) -> str:
     # yani bu her zaman zaman sınırı kesmesinden kaynaklanmıyor. Bu yüzden
     # bu temizliği süre kesmesi olsun olmasın her zaman uyguluyoruz.
     text = _strip_degenerate_tail(text)
-    if truncated:
+    text = _strip_stray_token_lines(text)
+    text, found_source = _cut_after_source_line(text)
+    if truncated and not found_source:
         text = _trim_to_sentence_boundary(text)
     return text
 
@@ -197,6 +207,49 @@ def _strip_degenerate_tail(text: str) -> str:
     if match:
         text = text[: match.start()]
     return text
+
+
+# Kod bloklarının ortasında bazen tek başına bir satırda anlamsız, yalnız bir
+# rakam ya da tek harf beliriyor (gözlemlenen örnekler: bir println satırından
+# hemen sonra tek başına "0", başka bir örnekte kod bloğunun sonunda tek başına
+# "s"). Böyle bir satır gerçek Java kodunda neredeyse hiç geçerli değildir --
+# geçerli bir ifade en azından noktalı virgül, parantez veya birden fazla
+# karakter içerir -- bu yüzden bu satırları güvenle kaldırabiliyoruz. Bu, kodu
+# kopyalayıp derlemeye çalışan bir öğrenci için gerçek bir sorun (derleme
+# hatası) yaratıyordu, sadece kozmetik değildi.
+_STRAY_TOKEN_LINE_PATTERN = re.compile(r"^(?:\d+|[a-zA-Z])$")
+
+
+def _strip_stray_token_lines(text: str) -> str:
+    lines = text.split("\n")
+    cleaned = [line for line in lines if not _STRAY_TOKEN_LINE_PATTERN.fullmatch(line.strip())]
+    return "\n".join(cleaned)
+
+
+# İstenen davranış: "Source: <dosya>" cevabın EN SONUNDA olmalı. Küçük model
+# bazen bu satırı doğru üretip talimatı "bitiş" sinyali olarak görmüyor ve
+# devam edip aynı konuyu (bazen ikinci bir kod örneğiyle) tekrar anlatmaya
+# başlıyor -- bu hem "Source" satırının cevabın ortasında kalmasına hem de bu
+# fazladan kısmın süre sınırıyla yarıda kesilmesine yol açıyordu (gözlemlenen
+# bir örnekte). İlk "Source:" satırını bulup ondan sonrasını atarak hem
+# tekrarı hem de yarıda kesilmeyi tek seferde çözüyoruz.
+_SOURCE_LINE_PATTERN = re.compile(r"^\**source\**\s*:\s*.+$", re.IGNORECASE | re.MULTILINE)
+
+
+def _cut_after_source_line(text: str) -> tuple[str, bool]:
+    match = _SOURCE_LINE_PATTERN.search(text)
+    if not match:
+        return text, False
+
+    before = text[: match.start()]
+    source_line = text[match.start() : match.end()]
+    # Model bazen "Source:" satırını bir kod bloğunu (```) kapatmadan hemen
+    # önce yazıyor -- bu durumda burada kestiğimizde blok kapanmamış kalır ve
+    # Streamlit'in markdown render'ı bozulur. Kapanmamış (tek sayıda ```)
+    # bir blok varsa Source satırından önce kapatıyoruz.
+    if before.count("```") % 2 == 1:
+        before = before.rstrip() + "\n```\n\n"
+    return before + source_line, True
 
 
 def _trim_to_sentence_boundary(text: str) -> str:
