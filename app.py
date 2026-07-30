@@ -75,6 +75,20 @@ def _strip_leaked_answer(text: str) -> str:
     return text.strip()
 
 
+def _truncate_to_first_question(text: str) -> str:
+    """INTERVIEW_QUESTION_PROMPT tek bir soru cümlesi istiyor, ama özellikle
+    kod-tabanlı kaynaklarla (örn. java-interview-questions-programs.md) model
+    bazen bunun yerine kendi talimatını yansıtan bir açıklamayla ("formulate
+    an interview question that...") başlayıp, "ve" ile birleştirilmiş birden
+    fazla soru yazıp, sonuna gereksiz bir "Source:" ekleyebiliyor. İlk '?'
+    işaretinden sonrasını atarak -- talimata zaten uygun olan tek soruluk
+    çıktıları etkilemeden -- bu fazlalığı deterministik olarak kesiyoruz."""
+    idx = text.find("?")
+    if idx != -1:
+        return text[: idx + 1].strip()
+    return text.strip()
+
+
 # Bilgi tabanı sadece Java kaynaklarından oluşuyor, ama ortak kavramlar (örn.
 # "for loop") başka bir dilde sorulsa bile embedding benzerliği eşiğin (0.50)
 # üstüne çıkabiliyor -- gözlemlenen bir örnekte "How do I write a for loop in
@@ -438,6 +452,7 @@ if st.session_state.interview_question_pending:
                         "Based on this material, ask me a single interview question.",
                     )
                     posed_question = _strip_leaked_answer(posed_question)
+                    posed_question = _truncate_to_first_question(posed_question)
                 except Exception as exc:
                     posed_question = f"An error occurred: {exc}"
                     chunk = None
